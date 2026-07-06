@@ -1,0 +1,36 @@
+# DataWhisperer — Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+
+# Application data
+data/
+uploads/
+charts/
+exports/
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
