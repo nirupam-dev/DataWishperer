@@ -1,8 +1,9 @@
 """
-Visualization service — Post-processes and manages generated charts.
+Visualization service — Intelligent chart management and rendering.
 
-Handles chart file management, Plotly figure creation for interactive
-charts in Streamlit, and chart theming.
+Integrates the visualization engine (selector, generator, explainer, exporter)
+with the agent pipeline. Handles chart file management, Plotly figure creation
+for interactive charts in Streamlit, and chart theming.
 """
 
 from __future__ import annotations
@@ -11,31 +12,34 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import pandas as pd
+
 from backend.core.config import StorageSettings, get_settings
 from backend.core.logging_config import get_logger
+from backend.visualization.chart_selector import ChartSelector, ChartSpec, ChartType
+from backend.visualization.chart_generator import ChartGenerator
+from backend.visualization.chart_themes import ChartThemeManager, build_plotly_layout, DARK_THEME
+from backend.visualization.chart_explainer import ChartExplainer
+from backend.visualization.chart_export import ChartExporter
 
 logger = get_logger(__name__)
 
-# Dark theme configuration for Plotly charts (used by Streamlit frontend)
-PLOTLY_DARK_THEME: Dict[str, Any] = {
-    "template": "plotly_dark",
-    "paper_bgcolor": "rgba(0,0,0,0)",
-    "plot_bgcolor": "rgba(0,0,0,0)",
-    "font": {"family": "Inter, sans-serif", "color": "#F0F0F5"},
-    "colorway": [
-        "#6C5CE7", "#00CEC9", "#FD79A8", "#FDCB6E",
-        "#55EFC4", "#A29BFE", "#FF7675", "#74B9FF",
-    ],
-}
+# Plotly dark theme for backward compatibility
+PLOTLY_DARK_THEME: Dict[str, Any] = build_plotly_layout(DARK_THEME)
 
 
 class VisualizationService:
     """
-    Manages chart generation artifacts and theming.
+    Manages intelligent chart selection, generation, and export.
 
-    This service does not generate charts directly (the sandbox does that).
-    Instead, it manages chart files, applies consistent theming, and
-    provides chart metadata for the UI.
+    This service integrates the full visualization pipeline:
+        1. ChartSelector: Determines optimal chart type from question + data
+        2. ChartGenerator: Renders matplotlib PNG + Plotly interactive JSON
+        3. ChartExplainer: Generates automatic chart explanations
+        4. ChartExporter: Multi-format download (PNG, HTML)
+
+    It also manages chart file lifecycle (listing, cleanup) and provides
+    Plotly theme configuration for the Streamlit frontend.
 
     Args:
         storage_settings: Storage configuration.
@@ -46,6 +50,95 @@ class VisualizationService:
         self._storage = storage_settings or settings.storage
         self._charts_dir = self._storage.charts_path
         self._charts_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize visualization engine components
+        self._theme_manager = ChartThemeManager()
+        self._selector = ChartSelector()
+        self._generator = ChartGenerator(self._theme_manager)
+        self._explainer = ChartExplainer()
+        self._exporter = ChartExporter(str(self._storage.export_path))
+
+    @property
+    def selector(self) -> ChartSelector:
+        """Expose the chart selector for direct use."""
+        return self._selector
+
+    @property
+    def generator(self) -> ChartGenerator:
+        """Expose the chart generator."""
+        return self._generator
+
+    @property
+    def theme_manager(self) -> ChartThemeManager:
+        """Expose the theme manager."""
+        return self._theme_manager
+
+    # ── Intelligent Chart Pipeline ───────────────────────────────────────
+
+    def auto_generate_chart(
+        self,
+        df: pd.DataFrame,
+        question: str,
+        file_metadata: Any,
+    ) -> Dict[str, Any]:
+        """
+        Full pipeline: select chart type → generate → explain.
+
+        This is the primary entry point for AI-driven chart generation.
+
+        Args:
+            df: The source DataFrame.
+            question: The user's question.
+            file_metadata: FileMetadata for column analysis.
+
+        Returns:
+            Dict with: chart_path, chart_type, plotly_json, explanation,
+            title, reasoning, confidence.
+        """
+        # Step 1: Select optimal chart type
+        spec = self._selector.select(question=question, file_metadata=file_metadata)
+        logger.info(
+            "Chart selected: %s (confidence=%.2f) — %s",
+            spec.chart_type.value,
+            spec.confidence,
+            spec.reasoning[:80],
+        )
+
+        # Step 2: Generate the chart
+        result = self._generator.generate(
+            df=df, spec=spec, output_dir=str(self._charts_dir)
+        )
+
+        # Step 3: Generate explanation
+        explanation = self._explainer.explain(df=df, spec=spec)
+        result["explanation"] = explanation
+
+        return result
+
+    def generate_chart_from_spec(
+        self,
+        df: pd.DataFrame,
+        spec: ChartSpec,
+    ) -> Dict[str, Any]:
+        """
+        Generate a chart from an explicit ChartSpec.
+
+        Used when the caller wants to override automatic selection.
+
+        Args:
+            df: The source DataFrame.
+            spec: An explicit chart specification.
+
+        Returns:
+            Dict with chart_path, plotly_json, explanation, etc.
+        """
+        result = self._generator.generate(
+            df=df, spec=spec, output_dir=str(self._charts_dir)
+        )
+        result["explanation"] = self._explainer.explain(df=df, spec=spec)
+        return result
+
+    # ── Chart File Management ────────────────────────────────────────────
 
     def get_chart_path(self, chart_filename: str) -> Optional[Path]:
         """
@@ -114,6 +207,33 @@ class VisualizationService:
 
         return len(to_delete)
 
+    # ── Export Support ───────────────────────────────────────────────────
+
+    def export_chart(
+        self,
+        chart_path: str,
+        format: str = "png",
+        plotly_json: Optional[Dict] = None,
+    ) -> Optional[str]:
+        """
+        Export a chart in the requested format.
+
+        Args:
+            chart_path: Path to the source PNG chart.
+            format: Export format ('png', 'html').
+            plotly_json: Plotly JSON data for HTML export.
+
+        Returns:
+            Path to the exported file, or None on failure.
+        """
+        if format == "png":
+            return self._exporter.export_png(chart_path)
+        elif format == "html" and plotly_json:
+            return self._exporter.export_plotly_html(plotly_json)
+        return None
+
+    # ── Theme Access ─────────────────────────────────────────────────────
+
     @staticmethod
     def get_plotly_theme() -> Dict[str, Any]:
         """
@@ -124,7 +244,7 @@ class VisualizationService:
         Returns:
             Theme configuration dict.
         """
-        return PLOTLY_DARK_THEME.copy()
+        return build_plotly_layout(DARK_THEME)
 
     def get_chart_count(self) -> int:
         """Return the total number of chart files."""

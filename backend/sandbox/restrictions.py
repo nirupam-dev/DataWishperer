@@ -38,7 +38,20 @@ ALLOWED_MODULES: frozenset[str] = frozenset({
     "matplotlib.ticker",
     "matplotlib.colors",
     "matplotlib.cm",
+    "matplotlib.patches",
     "plt",
+    "seaborn",
+    "sns",
+    "plotly",
+    "plotly.express",
+    "plotly.graph_objects",
+    "plotly.subplots",
+    "px",
+    "go",
+
+    # Statistics
+    "scipy",
+    "scipy.stats",
 
     # Standard library — safe, stateless modules
     "datetime",
@@ -63,6 +76,7 @@ ALLOWED_MODULES: frozenset[str] = frozenset({
 
 ALLOWED_MODULE_ROOTS: frozenset[str] = frozenset({
     "pandas", "pd", "numpy", "np", "matplotlib", "plt",
+    "seaborn", "sns", "plotly", "px", "go", "scipy",
     "datetime", "math", "statistics", "collections", "itertools",
     "functools", "re", "json", "decimal", "fractions", "operator",
     "string", "textwrap", "copy",

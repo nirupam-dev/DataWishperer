@@ -133,14 +133,16 @@ Data characteristics:
 - Data size: {data_size} rows
 
 SELECTION RULES:
-- Bar chart: comparing categories (< 15 categories)
-- Horizontal bar: comparing categories (long labels or > 10 categories)
+- Bar chart: comparing categories (<15 categories)
+- Horizontal bar: comparing categories (long labels or >10 categories)
 - Line chart: trends over time
 - Scatter plot: relationship between 2 numeric variables
 - Histogram: distribution of a single numeric variable
-- Pie chart: proportions (< 7 categories, must sum to 100%)
-- Box plot: distribution comparison across groups
-- Heatmap: correlation matrix or 2D aggregation
+- Pie chart: proportions (<7 categories, must sum to 100%)
+- Box plot: distribution comparison across groups, outlier detection
+- Violin plot: density-based distribution comparison
+- Heatmap: 2D aggregation or intensity visualization
+- Correlation matrix: pairwise correlation between all numeric columns
 
 Respond with ONLY the chart type name.\
 """

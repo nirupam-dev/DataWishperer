@@ -59,6 +59,32 @@ _CHART_TYPE_PATTERNS: Dict[str, str] = {
     r"\.heatmap\(|\.imshow\(": "heatmap",
     r"\.violinplot\(": "violin plot",
     r"\.area\(|\.plot\.area\(": "area chart",
+    # Seaborn chart detection
+    r"sns\.barplot\(": "bar chart",
+    r"sns\.histplot\(|sns\.distplot\(": "histogram",
+    r"sns\.scatterplot\(": "scatter plot",
+    r"sns\.heatmap\(": "heatmap",
+    r"sns\.boxplot\(": "box plot",
+    r"sns\.violinplot\(": "violin plot",
+    r"sns\.lineplot\(": "line chart",
+    r"sns\.kdeplot\(": "density plot",
+    r"sns\.pairplot\(": "pair plot",
+    # Plotly chart detection
+    r"px\.bar\(": "bar chart",
+    r"px\.scatter\(": "scatter plot",
+    r"px\.line\(": "line chart",
+    r"px\.histogram\(": "histogram",
+    r"px\.pie\(": "pie chart",
+    r"px\.box\(": "box plot",
+    r"px\.violin\(": "violin plot",
+    r"px\.imshow\(|px\.density_heatmap\(": "heatmap",
+    r"go\.Bar\(": "bar chart",
+    r"go\.Scatter\(": "scatter plot",
+    r"go\.Heatmap\(": "heatmap",
+    r"go\.Box\(": "box plot",
+    r"go\.Violin\(": "violin plot",
+    r"go\.Pie\(": "pie chart",
+    r"\.corr\(\)": "correlation matrix",
 }
 
 

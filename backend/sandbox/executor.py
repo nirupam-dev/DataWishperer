@@ -177,6 +177,22 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    # Visualization extras (available but not required)
+    try:
+        import seaborn as sns
+        sns.set_theme(style="darkgrid", palette="viridis")
+    except ImportError:
+        pass
+    try:
+        import plotly.express as px
+        import plotly.graph_objects as go
+    except ImportError:
+        pass
+    try:
+        import scipy.stats
+    except ImportError:
+        pass
+
     # ── Load Dataset ─────────────────────────────────────────────────
     try:
         df = pd.read_csv(r"{csv_path}")
