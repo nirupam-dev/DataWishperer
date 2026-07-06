@@ -7,13 +7,17 @@ Orchestrates the complete code generation flow using LangChain primitives:
     3. Parses output, stripping chain-of-thought
     4. Manages retry with error context injection
 
-Uses LangChain's ``ChatPromptTemplate`` and ``RunnableSequence`` for
-structured prompt assembly, replacing manual string concatenation.
+Interpreter Pipeline Stages (this chain handles stages 2, 6, 7, 8):
+    Stage 2: Generate optimized Pandas code
+    Stage 6: Explain the code in simple English
+    Stage 7: Explain chart type selection
+    Stage 8: Auto-debug failed code and retry
 """
 
 from __future__ import annotations
 
 import json
+import re
 from typing import Dict, List, Optional, Tuple
 
 from langchain_core.messages import (
@@ -22,7 +26,6 @@ from langchain_core.messages import (
     HumanMessage,
     SystemMessage,
 )
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.core.config import ChatSettings, get_settings
 from backend.core.exceptions import (
@@ -36,6 +39,8 @@ from backend.llm.memory import ConversationMemory
 from backend.llm.prompts.context_builder import ContextBuilder
 from backend.llm.prompts.few_shot import format_few_shot_examples
 from backend.llm.prompts.system import (
+    CHART_EXPLANATION_PROMPT,
+    DEBUG_PROMPT,
     ERROR_RECOVERY_PROMPT,
     EXPLANATION_PROMPT,
     REASONING_PROMPT,
@@ -48,18 +53,35 @@ from backend.models.schemas import FileMetadata, LLMResponse
 
 logger = get_logger(__name__)
 
+# Chart type detection patterns for chart explanation generation
+_CHART_TYPE_PATTERNS: Dict[str, str] = {
+    r"\.bar\(": "bar chart",
+    r"\.barh\(": "horizontal bar chart",
+    r"\.plot\.bar\(": "bar chart",
+    r"\.hist\(": "histogram",
+    r"\.scatter\(": "scatter plot",
+    r"\.plot\.scatter\(": "scatter plot",
+    r"\.pie\(": "pie chart",
+    r"\.plot\.pie\(": "pie chart",
+    r"\.plot\.line\(|\.plot\(\)": "line chart",
+    r"\.boxplot\(|\.plot\.box\(": "box plot",
+    r"\.heatmap\(|\.imshow\(": "heatmap",
+    r"\.violinplot\(": "violin plot",
+    r"\.area\(|\.plot\.area\(": "area chart",
+}
+
 
 class QueryChain:
     """
-    LangChain-based query chain for code generation.
+    LangChain-based query chain for the code interpreter pipeline.
 
-    Responsible for:
-        - Assembling prompts with system instructions, dataset context,
-          conversation memory, and the user's question
-        - Calling the LLM via OllamaProvider's ChatOllama
-        - Parsing generated code and stripping chain-of-thought
-        - Managing retry logic with error context injection
-        - Generating session titles and suggested questions
+    Handles code generation, explanation, chart reasoning, and auto-debug.
+
+    Interpreter Stages:
+        - ``generate_code()``: Stage 2 — Generate optimized Pandas code
+        - ``generate_explanation()``: Stage 6 — Plain English code explanation
+        - ``generate_chart_explanation()``: Stage 7 — Chart type reasoning
+        - ``debug_code()``: Stage 8 — Auto-debug failed code
 
     Args:
         provider: The Ollama LLM provider.
@@ -87,6 +109,8 @@ class QueryChain:
     def memory(self) -> ConversationMemory:
         """Expose the conversation memory for external use."""
         return self._memory
+
+    # ── Stage 2: Code Generation ─────────────────────────────────────────
 
     def generate_code(
         self,
@@ -155,16 +179,18 @@ class QueryChain:
 
         return code, llm_response, reasoning
 
+    # ── Stage 6: Code Explanation ────────────────────────────────────────
+
     def generate_explanation(
         self,
         code: str,
         result_summary: str,
     ) -> str:
         """
-        Generate a user-facing explanation of analysis results.
+        Stage 6: Explain the code and results in simple English.
 
-        The explanation is written for non-technical users and avoids
-        exposing any code or internal reasoning.
+        Generates a user-facing explanation that avoids jargon, focuses
+        on key findings, and references specific numbers from the results.
 
         Args:
             code: The executed Python code.
@@ -181,13 +207,126 @@ class QueryChain:
 
         try:
             response = self._provider.generate(
-                messages, temperature=0.5, max_tokens=200
+                messages, temperature=0.5, max_tokens=250
             )
             explanation = self._parser.extract_text_response(response.content)
             return explanation or "Analysis complete."
         except Exception:
             logger.warning("Explanation generation failed, using default.")
             return "Analysis complete."
+
+    # ── Stage 7: Chart Explanation ───────────────────────────────────────
+
+    def generate_chart_explanation(
+        self,
+        code: str,
+        question: str,
+    ) -> Optional[str]:
+        """
+        Stage 7: Explain why a specific chart type was chosen.
+
+        Only called when the execution result includes a chart. Detects
+        the chart type from the code and generates reasoning for the choice.
+
+        Args:
+            code: The executed code that generated a chart.
+            question: The user's original question.
+
+        Returns:
+            A 1-2 sentence chart type explanation, or None if detection fails.
+        """
+        chart_type = self._detect_chart_type(code)
+        if not chart_type:
+            return None
+
+        prompt = CHART_EXPLANATION_PROMPT.format(
+            code=code[:400],
+            question=question[:200],
+            chart_type=chart_type,
+        )
+        messages = [{"role": "user", "content": prompt}]
+
+        try:
+            response = self._provider.generate(
+                messages, temperature=0.5, max_tokens=150
+            )
+            explanation = self._parser.extract_text_response(response.content)
+            return explanation or None
+        except Exception:
+            logger.warning("Chart explanation generation failed.")
+            return f"A {chart_type} was used to visualize this data."
+
+    # ── Stage 8: Auto-Debug ──────────────────────────────────────────────
+
+    def debug_code(
+        self,
+        failed_code: str,
+        error: Exception,
+        file_metadata: FileMetadata,
+        question: str,
+    ) -> Tuple[str, LLMResponse]:
+        """
+        Stage 8: Automatically debug failed code and produce a fix.
+
+        Uses a specialized debug prompt that's more diagnostic than the
+        generic error recovery — it asks the LLM to identify the root
+        cause and write defensive code.
+
+        Args:
+            failed_code: The code that failed execution.
+            error: The exception from execution.
+            file_metadata: Dataset metadata for column reference.
+            question: The original user question (for context).
+
+        Returns:
+            A tuple of ``(fixed_code, llm_response)``.
+
+        Raises:
+            GenerationError: If the debugger cannot produce valid code.
+        """
+        error_type = type(error).__name__
+        error_message = str(error)
+
+        if isinstance(error, (CodeValidationError, ExecutionRuntimeError)):
+            error_message = error.message
+
+        columns = ", ".join(f"'{c.name}'" for c in file_metadata.columns)
+        dtypes = ", ".join(
+            f"{c.name}: {c.dtype}" for c in file_metadata.columns
+        )
+
+        debug_prompt = DEBUG_PROMPT.format(
+            failed_code=failed_code[:800],
+            error_type=error_type,
+            error_message=error_message,
+            columns=columns,
+            dtypes=dtypes,
+            row_count=file_metadata.row_count,
+        )
+
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": debug_prompt},
+        ]
+
+        logger.info(
+            "Auto-debugging code: error=%s: %s",
+            error_type,
+            error_message[:100],
+        )
+
+        llm_response = self._provider.generate(messages)
+        fixed_code = self._parser.extract_code(llm_response.content)
+
+        logger.info(
+            "Debug fix generated: %d chars, %d tokens",
+            len(fixed_code),
+            llm_response.tokens_used,
+        )
+
+        return fixed_code, llm_response
+
+    # ── Auxiliary Generation Methods ─────────────────────────────────────
 
     def generate_title(self, question: str) -> str:
         """
@@ -306,8 +445,7 @@ class QueryChain:
             2. Dataset context (full on first attempt, compact on retry)
             3. Few-shot examples (attempt 1 only, saves tokens on retries)
             4. Conversation history from memory (sliding window)
-            5. Reasoning instruction
-            6. User question (with error context on retries)
+            5. Reasoning instruction + user question
         """
         messages: List[Dict[str, str]] = []
 
@@ -358,3 +496,24 @@ class QueryChain:
         })
 
         return messages
+
+    @staticmethod
+    def _detect_chart_type(code: str) -> Optional[str]:
+        """
+        Detect the chart type from generated matplotlib/plotly code.
+
+        Args:
+            code: The Python code to analyze.
+
+        Returns:
+            A human-readable chart type string, or None if not a chart.
+        """
+        for pattern, chart_name in _CHART_TYPE_PATTERNS.items():
+            if re.search(pattern, code):
+                return chart_name
+
+        # Fallback: check for generic plot commands
+        if "plt.savefig" in code or "chart_path" in code:
+            return "chart"
+
+        return None

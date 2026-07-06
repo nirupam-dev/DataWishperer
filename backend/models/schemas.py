@@ -135,7 +135,16 @@ class ChatMessage(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Response returned to the user after processing a question."""
+    """
+    Response returned to the user after processing a question.
+
+    Structured for code-interpreter-style display:
+        - ``generated_code``: The pandas code that was generated
+        - ``result_data``: The execution output (table, text, chart path)
+        - ``explanation``: Plain-English explanation of the code & results
+        - ``chart_explanation``: Why this chart type was chosen (charts only)
+        - ``content``: Pre-formatted combined output for simple consumers
+    """
 
     message_id: str
     content: str
@@ -143,9 +152,12 @@ class ChatResponse(BaseModel):
     result_type: ResultType
     result_data: Optional[Any] = None
     chart_path: Optional[str] = None
+    explanation: Optional[str] = None
+    chart_explanation: Optional[str] = None
     tokens_used: int = 0
     latency_ms: float = 0.0
     retry_count: int = 0
+    auto_debug_applied: bool = False
 
 
 # ── Session Schemas ──────────────────────────────────────────────────────────

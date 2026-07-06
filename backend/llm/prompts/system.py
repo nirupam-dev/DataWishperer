@@ -6,7 +6,15 @@ Design Decisions:
     - Instructions use numbered lists (Qwen2.5 responds well to structured prompts)
     - Chain-of-thought is encouraged internally but hidden via output format
     - Output format uses strict fences that the parser can reliably extract
-    - Few examples of "bad" behavior prevent common local LLM mistakes
+    - Separate prompts for each interpreter stage avoid bloated system prompts
+
+Interpreter Pipeline Prompts:
+    1. SYSTEM_PROMPT — Core code generation instructions
+    2. REASONING_PROMPT — Internal step-by-step reasoning
+    3. EXPLANATION_PROMPT — Plain-English result explanation
+    4. CHART_EXPLANATION_PROMPT — Why a specific chart type was chosen
+    5. DEBUG_PROMPT — Automatic code debugging on failure
+    6. ERROR_RECOVERY_PROMPT — Error context for retries
 """
 
 from __future__ import annotations
@@ -48,13 +56,82 @@ Think step-by-step about how to answer this question:
 1. What columns are relevant?
 2. What transformations are needed?
 3. What pandas operations will produce the answer?
+4. What chart type best visualizes this data (if visualization is needed)?
 
 Then write your code inside ```python ... ``` fences.
 Do NOT show your reasoning steps. Output ONLY the code block.
 """
 
+# ── Explanation Generation Prompt ────────────────────────────────────────────
+# Stage 6 of the interpreter: explain the code and results in plain English
+
+EXPLANATION_PROMPT: str = """\
+You are explaining a data analysis result to a non-technical user.
+
+The code that was executed:
+```python
+{code}
+```
+
+The result was:
+{result_summary}
+
+Write a clear, brief explanation:
+- What the code does (in simple terms, no jargon)
+- What the key findings are
+- Any notable patterns or values
+
+Do NOT include any code. 2-4 sentences. Be specific about numbers.
+"""
+
+# ── Chart Explanation Prompt ─────────────────────────────────────────────────
+# Stage 7 of the interpreter: explain why a specific chart type was chosen
+
+CHART_EXPLANATION_PROMPT: str = """\
+A data analyst generated this chart code:
+```python
+{code}
+```
+
+The user asked: "{question}"
+The chart type used: {chart_type}
+
+Explain in 1-2 sentences:
+1. WHY this chart type was chosen for this data/question
+2. What the chart reveals about the data
+
+Do NOT include any code. Be concise.
+"""
+
+# ── Debug Prompt ─────────────────────────────────────────────────────────────
+# Stage 8 of the interpreter: automatic debugging on first failure
+# More diagnostic than ERROR_RECOVERY_PROMPT — analyzes the root cause
+
+DEBUG_PROMPT: str = """\
+The following Python pandas code FAILED during execution:
+
+```python
+{failed_code}
+```
+
+Error: {error_type}: {error_message}
+
+Dataset info:
+- Columns: {columns}
+- Types: {dtypes}
+- Row count: {row_count}
+
+DEBUG this code:
+1. Identify the ROOT CAUSE of the error
+2. Write a FIXED version that handles this case
+3. Add defensive checks to prevent similar errors
+
+Write the fixed code in ```python ... ``` fences.
+IMPORTANT: Keep the same analytical intent. Fix the bug, don't change the analysis.
+"""
+
 # ── Error Recovery Prompt ────────────────────────────────────────────────────
-# Injected on retry attempts with error context from previous failure
+# Fallback prompt used after debug also fails
 
 ERROR_RECOVERY_PROMPT: str = """\
 Your previous code FAILED with this error:
@@ -106,21 +183,4 @@ Columns: {columns}
 
 IMPORTANT: All previous analysis was on a DIFFERENT dataset.
 Use ONLY the columns listed above for new queries.
-"""
-
-# ── Explanation Generation Prompt ────────────────────────────────────────────
-# Separate prompt for generating user-facing explanations of results
-
-EXPLANATION_PROMPT: str = """\
-You analyzed a dataset and produced this result:
-{result_summary}
-
-Using this code:
-```python
-{code}
-```
-
-Write a brief, clear explanation of the findings for a non-technical user.
-Focus on key insights. Use bullet points if helpful.
-Do NOT include any code. 2-4 sentences maximum.
 """

@@ -1,5 +1,5 @@
 """
-Chat service — Orchestrates the question-to-answer pipeline via the Agent.
+Chat service — Orchestrates the interpreter pipeline via the Agent.
 
 This service bridges the UI/API layer with the DataWhispererAgent,
 handling session management, message persistence, and response formatting.
@@ -9,24 +9,18 @@ intelligence. The service handles only:
     1. Input validation
     2. Session/message persistence (DB)
     3. Agent invocation
-    4. Response formatting for the UI
+    4. Response mapping to ChatResponse schema
 """
 
 from __future__ import annotations
 
 import json
-import time
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
-from backend.core.config import ChatSettings, SandboxSettings, get_settings
-from backend.core.exceptions import (
-    DataWhispererError,
-    InvalidQueryError,
-)
+from backend.core.config import ChatSettings, get_settings
+from backend.core.exceptions import InvalidQueryError
 from backend.core.logging_config import get_logger
-from backend.llm.agent import AgentResult, DataWhispererAgent
+from backend.llm.agent import DataWhispererAgent
 from backend.models.schemas import (
     ChatMessage,
     ChatResponse,
@@ -83,15 +77,16 @@ class ChatService:
         csv_path: str,
     ) -> ChatResponse:
         """
-        Process a user question through the complete pipeline.
+        Process a user question through the interpreter pipeline.
 
         Pipeline:
             1. Validate and sanitize the question
-            2. Save the user message to history
+            2. Save the user message to DB
             3. Load session memory if not already loaded
-            4. Invoke the agent
-            5. Save the assistant response
+            4. Invoke the agent (8-stage interpreter pipeline)
+            5. Save the assistant response to DB
             6. Touch the session timestamp
+            7. Return structured ChatResponse with all interpreter outputs
 
         Args:
             session_id: The current chat session ID.
@@ -101,7 +96,12 @@ class ChatService:
             csv_path: Disk path to the CSV file.
 
         Returns:
-            A ``ChatResponse`` with the analysis result.
+            A ``ChatResponse`` with all interpreter pipeline outputs:
+                - generated_code: The pandas code that was generated
+                - result_data: The execution output
+                - explanation: Plain-English explanation
+                - chart_explanation: Chart type reasoning (if applicable)
+                - auto_debug_applied: Whether auto-debug was triggered
 
         Raises:
             InvalidQueryError: If the question fails validation.
@@ -121,7 +121,7 @@ class ChatService:
         # 3. Ensure session memory is loaded
         self._ensure_memory_loaded(session_id)
 
-        # 4. Invoke the agent
+        # 4. Invoke the agent (full 8-stage interpreter pipeline)
         result = self._agent.process_question(
             session_id=session_id,
             file_id=file_id,
@@ -152,13 +152,16 @@ class ChatService:
         self._session_repo.touch(session_id)
 
         logger.info(
-            "Question processed: session=%s, success=%s, attempts=%d, %.0fms",
+            "Question processed: session=%s, success=%s, attempts=%d, "
+            "debug=%s, %.0fms",
             session_id,
             result.success,
             result.attempts,
+            result.auto_debug_applied,
             result.latency_ms,
         )
 
+        # 7. Return structured response with all interpreter outputs
         return ChatResponse(
             message_id=assistant_message.id,
             content=result.content,
@@ -166,9 +169,12 @@ class ChatService:
             result_type=result.result_type,
             result_data=result.result_data,
             chart_path=result.chart_path,
+            explanation=result.explanation,
+            chart_explanation=result.chart_explanation,
             tokens_used=result.tokens_used,
             latency_ms=result.latency_ms,
             retry_count=result.attempts - 1,
+            auto_debug_applied=result.auto_debug_applied,
         )
 
     def get_chat_history(self, session_id: str) -> List[ChatMessage]:
