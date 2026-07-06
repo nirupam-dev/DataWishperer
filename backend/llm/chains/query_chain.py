@@ -12,6 +12,8 @@ Interpreter Pipeline Stages (this chain handles stages 2, 6, 7, 8):
     Stage 6: Explain the code in simple English
     Stage 7: Explain chart type selection
     Stage 8: Auto-debug failed code and retry
+
+Refactored to use PromptRegistry for all prompt composition.
 """
 
 from __future__ import annotations
@@ -36,18 +38,7 @@ from backend.core.exceptions import (
 from backend.core.logging_config import get_logger
 from backend.llm.chains.output_parser import OutputParser
 from backend.llm.memory import ConversationMemory
-from backend.llm.prompts.context_builder import ContextBuilder
-from backend.llm.prompts.few_shot import format_few_shot_examples
-from backend.llm.prompts.system import (
-    CHART_EXPLANATION_PROMPT,
-    DEBUG_PROMPT,
-    ERROR_RECOVERY_PROMPT,
-    EXPLANATION_PROMPT,
-    REASONING_PROMPT,
-    SUGGESTED_QUESTIONS_PROMPT,
-    SYSTEM_PROMPT,
-    TITLE_GENERATION_PROMPT,
-)
+from backend.llm.prompts.registry import PromptRegistry
 from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.models.schemas import FileMetadata, LLMResponse
 
@@ -76,6 +67,7 @@ class QueryChain:
     LangChain-based query chain for the code interpreter pipeline.
 
     Handles code generation, explanation, chart reasoning, and auto-debug.
+    Uses PromptRegistry for all prompt composition.
 
     Interpreter Stages:
         - ``generate_code()``: Stage 2 — Generate optimized Pandas code
@@ -86,7 +78,7 @@ class QueryChain:
     Args:
         provider: The Ollama LLM provider.
         output_parser: Parser for extracting code from LLM output.
-        context_builder: Builder for dataset context strings.
+        prompt_registry: Registry for modular prompt composition.
         memory: Conversation memory manager.
         chat_settings: Chat configuration.
     """
@@ -95,13 +87,13 @@ class QueryChain:
         self,
         provider: OllamaProvider,
         output_parser: Optional[OutputParser] = None,
-        context_builder: Optional[ContextBuilder] = None,
+        prompt_registry: Optional[PromptRegistry] = None,
         memory: Optional[ConversationMemory] = None,
         chat_settings: Optional[ChatSettings] = None,
     ) -> None:
         self._provider = provider
         self._parser = output_parser or OutputParser()
-        self._context_builder = context_builder or ContextBuilder()
+        self._registry = prompt_registry or PromptRegistry()
         self._memory = memory or ConversationMemory()
         self._chat_settings = chat_settings or get_settings().chat
 
@@ -109,6 +101,11 @@ class QueryChain:
     def memory(self) -> ConversationMemory:
         """Expose the conversation memory for external use."""
         return self._memory
+
+    @property
+    def registry(self) -> PromptRegistry:
+        """Expose the prompt registry for external use."""
+        return self._registry
 
     # ── Stage 2: Code Generation ─────────────────────────────────────────
 
@@ -143,10 +140,14 @@ class QueryChain:
             GenerationError: If code cannot be extracted from the response.
             OllamaConnectionError: If the LLM is unreachable.
         """
-        messages = self._build_messages(
+        # Get conversation history from memory
+        session_history = self._memory.get_dict_messages(session_id)
+
+        # Build messages via the PromptRegistry
+        messages = self._registry.build_generation_messages(
             question=question,
             file_metadata=file_metadata,
-            session_id=session_id,
+            session_history=session_history,
             all_datasets=all_datasets,
             error_context=error_context,
             attempt=attempt,
@@ -189,9 +190,6 @@ class QueryChain:
         """
         Stage 6: Explain the code and results in simple English.
 
-        Generates a user-facing explanation that avoids jargon, focuses
-        on key findings, and references specific numbers from the results.
-
         Args:
             code: The executed Python code.
             result_summary: Brief summary of the execution result.
@@ -199,11 +197,10 @@ class QueryChain:
         Returns:
             A 2-4 sentence explanation string.
         """
-        prompt = EXPLANATION_PROMPT.format(
-            code=code[:500],
-            result_summary=result_summary[:300],
+        messages = self._registry.build_explanation_messages(
+            code=code,
+            result_summary=result_summary,
         )
-        messages = [{"role": "user", "content": prompt}]
 
         try:
             response = self._provider.generate(
@@ -225,9 +222,6 @@ class QueryChain:
         """
         Stage 7: Explain why a specific chart type was chosen.
 
-        Only called when the execution result includes a chart. Detects
-        the chart type from the code and generates reasoning for the choice.
-
         Args:
             code: The executed code that generated a chart.
             question: The user's original question.
@@ -239,12 +233,11 @@ class QueryChain:
         if not chart_type:
             return None
 
-        prompt = CHART_EXPLANATION_PROMPT.format(
-            code=code[:400],
-            question=question[:200],
+        messages = self._registry.build_chart_explanation_messages(
+            code=code,
+            question=question,
             chart_type=chart_type,
         )
-        messages = [{"role": "user", "content": prompt}]
 
         try:
             response = self._provider.generate(
@@ -290,24 +283,13 @@ class QueryChain:
         if isinstance(error, (CodeValidationError, ExecutionRuntimeError)):
             error_message = error.message
 
-        columns = ", ".join(f"'{c.name}'" for c in file_metadata.columns)
-        dtypes = ", ".join(
-            f"{c.name}: {c.dtype}" for c in file_metadata.columns
-        )
-
-        debug_prompt = DEBUG_PROMPT.format(
-            failed_code=failed_code[:800],
+        # Build debug messages via the PromptRegistry
+        messages = self._registry.build_debug_messages(
+            failed_code=failed_code,
             error_type=error_type,
             error_message=error_message,
-            columns=columns,
-            dtypes=dtypes,
-            row_count=file_metadata.row_count,
+            file_metadata=file_metadata,
         )
-
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": debug_prompt},
-        ]
 
         logger.info(
             "Auto-debugging code: error=%s: %s",
@@ -326,27 +308,68 @@ class QueryChain:
 
         return fixed_code, llm_response
 
+    # ── Reflection Methods ───────────────────────────────────────────────
+
+    def reflect_on_code(
+        self,
+        code: str,
+        file_metadata: FileMetadata,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Pre-execution reflection: validate code before running it.
+
+        Returns (is_valid, fixed_code_or_none). If invalid, returns
+        the corrected code from the reflection.
+
+        Args:
+            code: The generated code to validate.
+            file_metadata: Dataset metadata for column cross-reference.
+
+        Returns:
+            Tuple of (is_valid, corrected_code_or_none).
+        """
+        messages = self._registry.build_reflection_messages(
+            code=code,
+            file_metadata=file_metadata,
+        )
+
+        try:
+            response = self._provider.generate(
+                messages, temperature=0.1, max_tokens=800
+            )
+            content = response.content.strip()
+
+            # Parse the reflection verdict
+            if "VERDICT: PASS" in content.upper():
+                return True, None
+
+            # Extract fixed code if present
+            if "VERDICT: FAIL" in content.upper():
+                try:
+                    fixed_code = self._parser.extract_code(content)
+                    return False, fixed_code
+                except GenerationError:
+                    logger.warning("Reflection found issues but no fix code.")
+                    return False, None
+
+            # Ambiguous response — treat as pass to avoid blocking
+            return True, None
+
+        except Exception:
+            logger.warning("Reflection failed, proceeding without validation.")
+            return True, None
+
     # ── Auxiliary Generation Methods ─────────────────────────────────────
 
     def generate_title(self, question: str) -> str:
-        """
-        Generate a short session title from the first user question.
-
-        Args:
-            question: The user's first question.
-
-        Returns:
-            A 4-6 word title string.
-        """
-        prompt = TITLE_GENERATION_PROMPT.format(question=question[:200])
-        messages = [{"role": "user", "content": prompt}]
+        """Generate a short session title from the first user question."""
+        messages = self._registry.build_title_messages(question)
 
         try:
             response = self._provider.generate(
                 messages, temperature=0.5, max_tokens=30
             )
             title = response.content.strip().strip('"').strip("'")
-            # Ensure reasonable length
             if len(title) > 60:
                 title = title[:57] + "..."
             return title or "Data Analysis"
@@ -359,30 +382,16 @@ class QueryChain:
         file_metadata: FileMetadata,
         count: int = 4,
     ) -> List[str]:
-        """
-        Generate suggested questions based on the dataset schema.
-
-        Args:
-            file_metadata: Metadata about the CSV file.
-            count: Number of questions to generate.
-
-        Returns:
-            List of suggested question strings.
-        """
-        columns_info = ", ".join(
-            f"{c.name} ({c.dtype})" for c in file_metadata.columns
+        """Generate suggested analytical questions for a dataset."""
+        messages = self._registry.build_suggested_questions_messages(
+            file_metadata, count
         )
-        prompt = SUGGESTED_QUESTIONS_PROMPT.format(
-            columns_info=columns_info, count=count
-        )
-        messages = [{"role": "user", "content": prompt}]
 
         try:
             response = self._provider.generate(
                 messages, temperature=0.7, max_tokens=300
             )
             content = response.content.strip()
-            # Find the JSON array in the response
             start = content.find("[")
             end = content.rfind("]") + 1
             if start != -1 and end > start:
@@ -398,28 +407,19 @@ class QueryChain:
         error: Exception,
         file_metadata: FileMetadata,
     ) -> str:
-        """
-        Build an error context string for retry prompts.
+        """Build an error context string for retry prompts."""
+        from backend.llm.prompts.correction_prompt import build_error_recovery_prompt
 
-        Args:
-            error: The exception from the previous attempt.
-            file_metadata: File metadata for column reference.
-
-        Returns:
-            Formatted error recovery prompt string.
-        """
         error_type = type(error).__name__
         error_message = str(error)
 
         if isinstance(error, (CodeValidationError, ExecutionRuntimeError)):
             error_message = error.message
 
-        columns = ", ".join(f"'{c.name}'" for c in file_metadata.columns)
-        dtypes = ", ".join(
-            f"{c.name}: {c.dtype}" for c in file_metadata.columns
-        )
+        columns = [c.name for c in file_metadata.columns]
+        dtypes = [f"{c.name}: {c.dtype}" for c in file_metadata.columns]
 
-        return ERROR_RECOVERY_PROMPT.format(
+        return build_error_recovery_prompt(
             error_type=error_type,
             error_message=error_message,
             columns=columns,
@@ -428,91 +428,13 @@ class QueryChain:
 
     # ── Private helpers ──────────────────────────────────────────────────
 
-    def _build_messages(
-        self,
-        question: str,
-        file_metadata: FileMetadata,
-        session_id: str,
-        all_datasets: Optional[Dict[str, FileMetadata]],
-        error_context: Optional[str],
-        attempt: int,
-    ) -> List[Dict[str, str]]:
-        """
-        Assemble the full message list for the LLM.
-
-        Message order:
-            1. System prompt (role + rules + output format)
-            2. Dataset context (full on first attempt, compact on retry)
-            3. Few-shot examples (attempt 1 only, saves tokens on retries)
-            4. Conversation history from memory (sliding window)
-            5. Reasoning instruction + user question
-        """
-        messages: List[Dict[str, str]] = []
-
-        # 1. System prompt
-        messages.append({"role": "system", "content": SYSTEM_PROMPT})
-
-        # 2. Dataset context
-        if attempt <= 1:
-            if all_datasets and len(all_datasets) > 1:
-                dataset_context = self._context_builder.build_multi_dataset_context(
-                    active_metadata=file_metadata,
-                    all_datasets=all_datasets,
-                )
-            else:
-                dataset_context = self._context_builder.build(file_metadata)
-        else:
-            dataset_context = self._context_builder.build_compact(file_metadata)
-
-        messages.append({
-            "role": "system",
-            "content": f"DATASET CONTEXT:\n{dataset_context}",
-        })
-
-        # 3. Few-shot examples (first attempt only to save tokens)
-        if attempt <= 1:
-            messages.append({
-                "role": "system",
-                "content": format_few_shot_examples(),
-            })
-
-        # 4. Conversation history from memory
-        history_messages = self._memory.get_dict_messages(session_id)
-        for msg in history_messages:
-            messages.append({
-                "role": msg.get("role", "user"),
-                "content": msg.get("content", ""),
-            })
-
-        # 5. User question with reasoning instruction and error context
-        user_parts = [REASONING_PROMPT, question]
-
-        if error_context and attempt > 1:
-            user_parts.append(error_context)
-
-        messages.append({
-            "role": "user",
-            "content": "\n\n".join(user_parts),
-        })
-
-        return messages
-
     @staticmethod
     def _detect_chart_type(code: str) -> Optional[str]:
-        """
-        Detect the chart type from generated matplotlib/plotly code.
-
-        Args:
-            code: The Python code to analyze.
-
-        Returns:
-            A human-readable chart type string, or None if not a chart.
-        """
+        """Detect the chart type from generated matplotlib/plotly code."""
         for pattern, chart_name in _CHART_TYPE_PATTERNS.items():
             if re.search(pattern, code):
                 return chart_name
 
-        # Fallback: check for generic plot commands
         if "plt.savefig" in code or "chart_path" in code:
             return "chart"
 

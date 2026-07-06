@@ -29,7 +29,7 @@ from backend.llm.agent import DataWhispererAgent
 from backend.llm.chains.output_parser import OutputParser
 from backend.llm.chains.query_chain import QueryChain
 from backend.llm.memory import ConversationMemory
-from backend.llm.prompts.context_builder import ContextBuilder
+from backend.llm.prompts.registry import PromptRegistry
 from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.sandbox.executor import SandboxExecutor
 from backend.services.chat_service import ChatService
@@ -77,13 +77,13 @@ def create_agent(
 
     # 3. Chain Components
     output_parser = OutputParser()
-    context_builder = ContextBuilder()
+    prompt_registry = PromptRegistry()
 
     # 4. Query Chain
     query_chain = QueryChain(
         provider=llm_provider,
         output_parser=output_parser,
-        context_builder=context_builder,
+        prompt_registry=prompt_registry,
         memory=memory,
         chat_settings=settings.chat,
     )
