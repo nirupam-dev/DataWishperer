@@ -1,19 +1,28 @@
 """
-Query chain — Orchestrates the full question-to-answer pipeline.
+Query chain — LangChain-based question-to-code pipeline.
 
-This is the core chain that:
-    1. Builds the prompt (system + context + history + question)
-    2. Calls the LLM provider
-    3. Parses the output to extract code
-    4. Returns structured results
+Orchestrates the complete code generation flow using LangChain primitives:
+    1. Builds prompt with system instructions, dataset context, memory
+    2. Invokes the LLM via ChatOllama
+    3. Parses output, stripping chain-of-thought
+    4. Manages retry with error context injection
 
-Implements retry logic with error context injection on failures.
+Uses LangChain's ``ChatPromptTemplate`` and ``RunnableSequence`` for
+structured prompt assembly, replacing manual string concatenation.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.core.config import ChatSettings, get_settings
 from backend.core.exceptions import (
@@ -22,16 +31,19 @@ from backend.core.exceptions import (
     GenerationError,
 )
 from backend.core.logging_config import get_logger
-from backend.llm.base_provider import BaseLLMProvider
 from backend.llm.chains.output_parser import OutputParser
+from backend.llm.memory import ConversationMemory
 from backend.llm.prompts.context_builder import ContextBuilder
 from backend.llm.prompts.few_shot import format_few_shot_examples
 from backend.llm.prompts.system import (
     ERROR_RECOVERY_PROMPT,
+    EXPLANATION_PROMPT,
+    REASONING_PROMPT,
     SUGGESTED_QUESTIONS_PROMPT,
     SYSTEM_PROMPT,
     TITLE_GENERATION_PROMPT,
 )
+from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.models.schemas import FileMetadata, LLMResponse
 
 logger = get_logger(__name__)
@@ -39,54 +51,69 @@ logger = get_logger(__name__)
 
 class QueryChain:
     """
-    Orchestrates the question → code generation pipeline.
+    LangChain-based query chain for code generation.
 
     Responsible for:
         - Assembling prompts with system instructions, dataset context,
-          chat history, and the user's question
-        - Calling the LLM via the injected provider
-        - Parsing generated code from the response
+          conversation memory, and the user's question
+        - Calling the LLM via OllamaProvider's ChatOllama
+        - Parsing generated code and stripping chain-of-thought
         - Managing retry logic with error context injection
+        - Generating session titles and suggested questions
 
     Args:
-        llm_provider: The LLM backend to use for generation.
+        provider: The Ollama LLM provider.
         output_parser: Parser for extracting code from LLM output.
         context_builder: Builder for dataset context strings.
+        memory: Conversation memory manager.
         chat_settings: Chat configuration.
     """
 
     def __init__(
         self,
-        llm_provider: BaseLLMProvider,
+        provider: OllamaProvider,
         output_parser: Optional[OutputParser] = None,
         context_builder: Optional[ContextBuilder] = None,
+        memory: Optional[ConversationMemory] = None,
         chat_settings: Optional[ChatSettings] = None,
     ) -> None:
-        self._llm = llm_provider
+        self._provider = provider
         self._parser = output_parser or OutputParser()
         self._context_builder = context_builder or ContextBuilder()
+        self._memory = memory or ConversationMemory()
         self._chat_settings = chat_settings or get_settings().chat
+
+    @property
+    def memory(self) -> ConversationMemory:
+        """Expose the conversation memory for external use."""
+        return self._memory
 
     def generate_code(
         self,
         question: str,
         file_metadata: FileMetadata,
-        history: Optional[List[Dict[str, str]]] = None,
+        session_id: str,
+        all_datasets: Optional[Dict[str, FileMetadata]] = None,
         error_context: Optional[str] = None,
         attempt: int = 1,
-    ) -> tuple[str, LLMResponse]:
+    ) -> Tuple[str, LLMResponse, Optional[str]]:
         """
         Generate Python code to answer a user's question about their data.
 
+        Internally reasons step-by-step but strips the reasoning from
+        the final output. Only executable code is returned.
+
         Args:
             question: The user's natural language question.
-            file_metadata: Metadata about the uploaded CSV file.
-            history: Optional list of previous chat messages for context.
+            file_metadata: Metadata about the active CSV file.
+            session_id: The current session ID for memory.
+            all_datasets: Optional dict of all loaded datasets for context.
             error_context: Optional error from a previous failed attempt.
             attempt: Current attempt number (1-indexed).
 
         Returns:
-            A tuple of ``(extracted_code, llm_response)``.
+            A tuple of ``(extracted_code, llm_response, reasoning_or_none)``.
+            The reasoning is for internal logging only — NEVER show to user.
 
         Raises:
             GenerationError: If code cannot be extracted from the response.
@@ -95,28 +122,72 @@ class QueryChain:
         messages = self._build_messages(
             question=question,
             file_metadata=file_metadata,
-            history=history,
+            session_id=session_id,
+            all_datasets=all_datasets,
             error_context=error_context,
             attempt=attempt,
         )
 
         logger.info(
             "Generating code: question='%s' (attempt %d, %d messages)",
-            question[:80], attempt, len(messages),
+            question[:80],
+            attempt,
+            len(messages),
         )
 
         # Call the LLM
-        llm_response = self._llm.generate(messages)
+        llm_response = self._provider.generate(messages)
 
-        # Extract code from the response
-        code = self._parser.extract_code(llm_response.content)
+        # Extract code and reasoning separately
+        code, reasoning = self._parser.extract_code_and_reasoning(
+            llm_response.content
+        )
+
+        if reasoning:
+            logger.debug("Internal reasoning: %s", reasoning[:200])
 
         logger.info(
             "Code generated: %d chars, %d tokens, %.0fms",
-            len(code), llm_response.tokens_used, llm_response.latency_ms,
+            len(code),
+            llm_response.tokens_used,
+            llm_response.latency_ms,
         )
 
-        return code, llm_response
+        return code, llm_response, reasoning
+
+    def generate_explanation(
+        self,
+        code: str,
+        result_summary: str,
+    ) -> str:
+        """
+        Generate a user-facing explanation of analysis results.
+
+        The explanation is written for non-technical users and avoids
+        exposing any code or internal reasoning.
+
+        Args:
+            code: The executed Python code.
+            result_summary: Brief summary of the execution result.
+
+        Returns:
+            A 2-4 sentence explanation string.
+        """
+        prompt = EXPLANATION_PROMPT.format(
+            code=code[:500],
+            result_summary=result_summary[:300],
+        )
+        messages = [{"role": "user", "content": prompt}]
+
+        try:
+            response = self._provider.generate(
+                messages, temperature=0.5, max_tokens=200
+            )
+            explanation = self._parser.extract_text_response(response.content)
+            return explanation or "Analysis complete."
+        except Exception:
+            logger.warning("Explanation generation failed, using default.")
+            return "Analysis complete."
 
     def generate_title(self, question: str) -> str:
         """
@@ -132,9 +203,11 @@ class QueryChain:
         messages = [{"role": "user", "content": prompt}]
 
         try:
-            response = self._llm.generate(messages, temperature=0.5, max_tokens=30)
+            response = self._provider.generate(
+                messages, temperature=0.5, max_tokens=30
+            )
             title = response.content.strip().strip('"').strip("'")
-            # Ensure it's reasonable length
+            # Ensure reasonable length
             if len(title) > 60:
                 title = title[:57] + "..."
             return title or "Data Analysis"
@@ -148,7 +221,7 @@ class QueryChain:
         count: int = 4,
     ) -> List[str]:
         """
-        Generate suggested questions based on the dataset.
+        Generate suggested questions based on the dataset schema.
 
         Args:
             file_metadata: Metadata about the CSV file.
@@ -166,8 +239,9 @@ class QueryChain:
         messages = [{"role": "user", "content": prompt}]
 
         try:
-            response = self._llm.generate(messages, temperature=0.7, max_tokens=300)
-            # Parse JSON array from response
+            response = self._provider.generate(
+                messages, temperature=0.7, max_tokens=300
+            )
             content = response.content.strip()
             # Find the JSON array in the response
             start = content.find("[")
@@ -179,68 +253,6 @@ class QueryChain:
         except Exception:
             logger.warning("Suggested questions generation failed.")
             return []
-
-    # ── Private helpers ──────────────────────────────────────────────────
-
-    def _build_messages(
-        self,
-        question: str,
-        file_metadata: FileMetadata,
-        history: Optional[List[Dict[str, str]]],
-        error_context: Optional[str],
-        attempt: int,
-    ) -> List[Dict[str, str]]:
-        """
-        Assemble the full message list for the LLM.
-
-        Message order:
-            1. System prompt (role + rules + output format)
-            2. Dataset context
-            3. Few-shot examples (attempt 1 only, to save tokens on retries)
-            4. Chat history (sliding window)
-            5. User question (with error context on retries)
-        """
-        messages: List[Dict[str, str]] = []
-
-        # 1. System prompt
-        messages.append({"role": "system", "content": SYSTEM_PROMPT})
-
-        # 2. Dataset context
-        if attempt <= 1:
-            dataset_context = self._context_builder.build(file_metadata)
-        else:
-            dataset_context = self._context_builder.build_compact(file_metadata)
-
-        messages.append({
-            "role": "system",
-            "content": f"DATASET CONTEXT:\n{dataset_context}",
-        })
-
-        # 3. Few-shot examples (first attempt only)
-        if attempt <= 1:
-            messages.append({
-                "role": "system",
-                "content": format_few_shot_examples(),
-            })
-
-        # 4. Chat history (sliding window)
-        if history:
-            window_size = self._chat_settings.history_window_size
-            for msg in history[-window_size:]:
-                messages.append({
-                    "role": msg.get("role", "user"),
-                    "content": msg.get("content", ""),
-                })
-
-        # 5. User question (with error context on retries)
-        if error_context and attempt > 1:
-            user_content = f"{question}\n\n{error_context}"
-        else:
-            user_content = question
-
-        messages.append({"role": "user", "content": user_content})
-
-        return messages
 
     def build_error_context(
         self,
@@ -274,3 +286,75 @@ class QueryChain:
             columns=columns,
             dtypes=dtypes,
         )
+
+    # ── Private helpers ──────────────────────────────────────────────────
+
+    def _build_messages(
+        self,
+        question: str,
+        file_metadata: FileMetadata,
+        session_id: str,
+        all_datasets: Optional[Dict[str, FileMetadata]],
+        error_context: Optional[str],
+        attempt: int,
+    ) -> List[Dict[str, str]]:
+        """
+        Assemble the full message list for the LLM.
+
+        Message order:
+            1. System prompt (role + rules + output format)
+            2. Dataset context (full on first attempt, compact on retry)
+            3. Few-shot examples (attempt 1 only, saves tokens on retries)
+            4. Conversation history from memory (sliding window)
+            5. Reasoning instruction
+            6. User question (with error context on retries)
+        """
+        messages: List[Dict[str, str]] = []
+
+        # 1. System prompt
+        messages.append({"role": "system", "content": SYSTEM_PROMPT})
+
+        # 2. Dataset context
+        if attempt <= 1:
+            if all_datasets and len(all_datasets) > 1:
+                dataset_context = self._context_builder.build_multi_dataset_context(
+                    active_metadata=file_metadata,
+                    all_datasets=all_datasets,
+                )
+            else:
+                dataset_context = self._context_builder.build(file_metadata)
+        else:
+            dataset_context = self._context_builder.build_compact(file_metadata)
+
+        messages.append({
+            "role": "system",
+            "content": f"DATASET CONTEXT:\n{dataset_context}",
+        })
+
+        # 3. Few-shot examples (first attempt only to save tokens)
+        if attempt <= 1:
+            messages.append({
+                "role": "system",
+                "content": format_few_shot_examples(),
+            })
+
+        # 4. Conversation history from memory
+        history_messages = self._memory.get_dict_messages(session_id)
+        for msg in history_messages:
+            messages.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", ""),
+            })
+
+        # 5. User question with reasoning instruction and error context
+        user_parts = [REASONING_PROMPT, question]
+
+        if error_context and attempt > 1:
+            user_parts.append(error_context)
+
+        messages.append({
+            "role": "user",
+            "content": "\n\n".join(user_parts),
+        })
+
+        return messages

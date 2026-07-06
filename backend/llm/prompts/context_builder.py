@@ -4,11 +4,16 @@ Context builder — Transforms CSV metadata into structured prompt context.
 Converts a ``FileMetadata`` schema into a compact, LLM-optimized text
 representation that gives the model enough information to write accurate
 pandas code without seeing the entire dataset.
+
+Optimization for local LLM:
+    - Token-efficient formatting (no padding, minimal whitespace)
+    - Critical-only information on retries (compact mode)
+    - Multi-dataset context support for context switching
 """
 
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List, Optional
 
 from backend.models.schemas import ColumnInfo, FileMetadata
 
@@ -22,6 +27,8 @@ class ContextBuilder:
         - Column table (name, type, nulls, uniques, samples)
         - Numeric summary (mean, std, min, max)
         - Data quality notes (null warnings, type hints)
+
+    Supports multi-dataset context for context switching.
     """
 
     def build(self, metadata: FileMetadata) -> str:
@@ -60,6 +67,79 @@ class ContextBuilder:
         ]
         return "\n".join(lines)
 
+    def build_multi_dataset_context(
+        self,
+        active_metadata: FileMetadata,
+        all_datasets: Dict[str, FileMetadata],
+    ) -> str:
+        """
+        Build context for multi-dataset scenarios.
+
+        Shows full context for the active dataset and a brief summary
+        of other available datasets for context switching awareness.
+
+        Args:
+            active_metadata: The currently active dataset's metadata.
+            all_datasets: Mapping of file_id → FileMetadata for all loaded datasets.
+
+        Returns:
+            Multi-dataset context string.
+        """
+        sections = [
+            "ACTIVE DATASET:",
+            self.build(active_metadata),
+        ]
+
+        other_datasets = {
+            fid: meta for fid, meta in all_datasets.items()
+            if fid != active_metadata.file_id
+        }
+
+        if other_datasets:
+            sections.append("\nOTHER LOADED DATASETS:")
+            for fid, meta in other_datasets.items():
+                cols = ", ".join(c.name for c in meta.columns[:5])
+                suffix = f"... (+{len(meta.columns) - 5} more)" if len(meta.columns) > 5 else ""
+                sections.append(
+                    f"- {meta.original_name}: {meta.row_count} rows × {meta.col_count} cols "
+                    f"[{cols}{suffix}]"
+                )
+
+        return "\n".join(sections)
+
+    def build_switch_context(
+        self,
+        new_metadata: FileMetadata,
+        old_name: Optional[str] = None,
+    ) -> str:
+        """
+        Build context for a dataset switch event.
+
+        Args:
+            new_metadata: The new active dataset's metadata.
+            old_name: Name of the previously active dataset (if any).
+
+        Returns:
+            Switch notification context string.
+        """
+        lines = []
+        if old_name:
+            lines.append(
+                f"DATASET SWITCHED: '{old_name}' → '{new_metadata.original_name}'"
+            )
+        lines.append(f"New dataset: {new_metadata.original_name}")
+        lines.append(
+            f"Shape: {new_metadata.row_count} rows × {new_metadata.col_count} cols"
+        )
+        lines.append("Columns: " + ", ".join(
+            f"{c.name} ({c.dtype})" for c in new_metadata.columns
+        ))
+        lines.append(
+            "\nIMPORTANT: Previous analysis used a different dataset. "
+            "Use ONLY the columns listed above."
+        )
+        return "\n".join(lines)
+
     # ── Private builders ─────────────────────────────────────────────────
 
     @staticmethod
@@ -77,11 +157,15 @@ class ContextBuilder:
     def _build_column_table(columns: List[ColumnInfo]) -> str:
         """Build a tabular representation of column metadata."""
         lines = ["COLUMNS:"]
-        lines.append(f"{'Column':<25} {'Type':<12} {'Non-Null':<10} {'Unique':<8} Sample Values")
+        lines.append(
+            f"{'Column':<25} {'Type':<12} {'Non-Null':<10} {'Unique':<8} Sample Values"
+        )
         lines.append("-" * 90)
 
         for col in columns:
-            samples = ", ".join(col.sample_values[:3]) if col.sample_values else "N/A"
+            samples = (
+                ", ".join(col.sample_values[:3]) if col.sample_values else "N/A"
+            )
             samples = samples[:40] + "..." if len(samples) > 40 else samples
             lines.append(
                 f"{col.name:<25} {col.dtype:<12} {col.non_null_count:<10} "
@@ -98,7 +182,9 @@ class ContextBuilder:
             return ""
 
         lines = ["NUMERIC SUMMARY:"]
-        lines.append(f"{'Column':<25} {'Mean':<15} {'Std':<15} {'Min':<15} {'Max':<15}")
+        lines.append(
+            f"{'Column':<25} {'Mean':<15} {'Std':<15} {'Min':<15} {'Max':<15}"
+        )
         lines.append("-" * 85)
 
         for col in numeric_cols:
@@ -116,14 +202,22 @@ class ContextBuilder:
 
         for col in columns:
             if col.null_count > 0:
-                pct = round(col.null_count / (col.non_null_count + col.null_count) * 100, 1)
+                pct = round(
+                    col.null_count / (col.non_null_count + col.null_count) * 100,
+                    1,
+                )
                 if pct > 5:
-                    notes.append(f"- '{col.name}' has {col.null_count} nulls ({pct}%)")
+                    notes.append(
+                        f"- '{col.name}' has {col.null_count} nulls ({pct}%)"
+                    )
 
             # Detect potential date columns
             if col.dtype == "object" and col.sample_values:
                 sample = col.sample_values[0]
-                if any(sep in sample for sep in ["-", "/", ":"]) and len(sample) >= 8:
+                if (
+                    any(sep in sample for sep in ["-", "/", ":"])
+                    and len(sample) >= 8
+                ):
                     notes.append(
                         f"- '{col.name}' appears to be a date/time column "
                         f"(consider pd.to_datetime)"
