@@ -1,0 +1,147 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DataWhisperer — Project Configuration
+#
+# This file defines the project metadata, build system, and tool configuration
+# following PEP 621 / PEP 517 conventions.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel>=0.41.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "datawhisperer"
+version = "1.0.0"
+description = "Talk to your CSV with AI — powered by Ollama + LangChain"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11,<3.13"
+authors = [
+    {name = "DataWhisperer Team"},
+]
+keywords = ["data-analysis", "ai", "llm", "ollama", "streamlit", "csv"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Streamlit",
+    "Intended Audience :: Data Scientists",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["backend*", "frontend*"]
+exclude = ["tests*", "docs*"]
+
+
+# ── Ruff (Linting + Formatting) ─────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+fix = true
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "S",     # flake8-bandit (security)
+    "A",     # flake8-builtins
+    "C4",    # flake8-comprehensions
+    "DTZ",   # flake8-datetimez
+    "T20",   # flake8-print
+    "RET",   # flake8-return
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+    "PTH",   # flake8-use-pathlib
+    "RUF",   # ruff-specific rules
+]
+ignore = [
+    "S101",   # allow assert in tests
+    "S603",   # subprocess calls are sandboxed
+    "S607",   # partial executable path (sandboxed)
+    "T201",   # allow print() in scripts
+    "B008",   # function calls in defaults (Pydantic Field)
+    "A003",   # shadowing built-in (id, type in models)
+    "RET504", # unnecessary assignment before return
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S106", "S105", "T201", "B011", "RUF012"]
+"backend/sandbox/**" = ["S603", "S607"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend", "frontend"]
+force-single-line = false
+lines-after-imports = 2
+
+
+# ── MyPy (Static Type Checking) ─────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+warn_unused_ignores = true
+check_untyped_defs = true
+disallow_untyped_decorators = false
+ignore_missing_imports = true
+show_error_codes = true
+show_column_numbers = true
+
+
+# ── Pytest ───────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks integration tests requiring external services",
+    "security: marks security/adversarial tests",
+]
+addopts = "-v --tb=short --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::FutureWarning",
+]
+
+
+# ── Coverage ─────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["backend", "frontend"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+precision = 2
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+    "raise NotImplementedError",
+    "pass",
+    "\\.\\.\\.",
+]

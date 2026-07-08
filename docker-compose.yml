@@ -1,41 +1,50 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # DataWhisperer — Docker Compose (Production)
 #
-# Brings up two services with one command:
-#   1. ollama  — Local LLM inference server
-#   2. app     — Streamlit frontend + backend
+# Services:
+#   1. ollama      — Local LLM inference (CPU, runs by default)
+#   2. ollama-gpu  — Local LLM inference (GPU, --profile gpu)
+#   3. model-init  — One-shot model puller (auto-exits after download)
+#   4. app         — Streamlit frontend + analytics backend
 #
 # Usage:
-#   CPU:  docker compose up -d
-#   GPU:  docker compose --profile gpu up -d
+#   CPU mode:   docker compose up -d
+#   GPU mode:   docker compose --profile gpu up -d
+#   Rebuild:    docker compose up -d --build
+#   Shutdown:   docker compose down
+#   Full reset: docker compose down -v
 #
-# First run will pull the Ollama model (~4GB). Subsequent starts are instant.
+# First run pulls the Ollama model (~4 GB). Subsequent starts are instant.
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
 
-  # ── Ollama (CPU) ───────────────────────────────────────────────────────
+  # ── Ollama LLM Server (CPU) ──────────────────────────────────────────────
+  # Runs by default when no --profile is specified.
   ollama:
     image: ollama/ollama:latest
     container_name: datawhisperer-ollama
-    profiles: ["cpu", ""]  # default profile
     ports:
       - "${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
       - ollama_models:/root/.ollama
+    networks:
+      - datawhisperer
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 15s
     restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 8G
 
-  # ── Ollama (GPU — NVIDIA) ──────────────────────────────────────────────
+  # ── Ollama LLM Server (GPU — NVIDIA) ────────────────────────────────────
+  # Activated only with: docker compose --profile gpu up -d
+  # When using GPU profile, stop the CPU ollama first or change ports.
   ollama-gpu:
     image: ollama/ollama:latest
     container_name: datawhisperer-ollama-gpu
@@ -44,12 +53,14 @@ services:
       - "${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
       - ollama_models:/root/.ollama
+    networks:
+      - datawhisperer
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 15s
     restart: unless-stopped
     deploy:
       resources:
@@ -61,8 +72,9 @@ services:
         limits:
           memory: 16G
 
-  # ── Model Initializer ─────────────────────────────────────────────────
-  # Pulls the configured model on first start, then exits.
+  # ── Model Initializer ───────────────────────────────────────────────────
+  # Pulls the configured model on first start, then exits cleanly.
+  # The entrypoint retries the pull to handle slow network starts.
   model-init:
     image: curlimages/curl:latest
     container_name: datawhisperer-model-init
@@ -73,16 +85,31 @@ services:
       ollama-gpu:
         condition: service_healthy
         required: false
+    networks:
+      - datawhisperer
     entrypoint: >
       sh -c '
-        echo "Pulling model: ${OLLAMA_MODEL:-qwen2.5:7b}..."
-        curl -s http://ollama:11434/api/pull -d "{\"name\": \"${OLLAMA_MODEL:-qwen2.5:7b}\"}"
-        echo ""
-        echo "Model ready."
+        MODEL="${OLLAMA_MODEL:-qwen2.5:7b}"
+        echo "╔══════════════════════════════════════════╗"
+        echo "║  Pulling model: $$MODEL                  "
+        echo "╚══════════════════════════════════════════╝"
+        for HOST in ollama ollama-gpu; do
+          if curl -sf "http://$$HOST:11434/api/tags" >/dev/null 2>&1; then
+            echo "→ Found Ollama at $$HOST"
+            curl -sf "http://$$HOST:11434/api/pull" \
+              -d "{\"name\": \"$$MODEL\"}" \
+              --max-time 1800
+            echo ""
+            echo "✓ Model $$MODEL is ready."
+            exit 0
+          fi
+        done
+        echo "✗ No Ollama server reachable."
+        exit 1
       '
     restart: "no"
 
-  # ── DataWhisperer App ──────────────────────────────────────────────────
+  # ── DataWhisperer Application ───────────────────────────────────────────
   app:
     build:
       context: .
@@ -97,23 +124,30 @@ services:
         required: false
     ports:
       - "${APP_PORT:-8501}:8501"
+    networks:
+      - datawhisperer
     environment:
-      # Override Ollama URL to point to the Docker service
+      # Ollama connection — resolves to whichever Ollama service is running
       - OLLAMA_BASE_URL=http://ollama:11434
+      # LLM parameters
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.1}
       - OLLAMA_NUM_PREDICT=${OLLAMA_NUM_PREDICT:-2048}
       - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-4096}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-120}
+      # Sandbox execution limits
       - SANDBOX_TIMEOUT=${SANDBOX_TIMEOUT:-30}
       - SANDBOX_MAX_MEMORY_MB=${SANDBOX_MAX_MEMORY_MB:-512}
       - SANDBOX_MAX_OUTPUT_KB=${SANDBOX_MAX_OUTPUT_KB:-256}
       - SANDBOX_MAX_RETRIES=${SANDBOX_MAX_RETRIES:-2}
+      # Storage limits
       - STORAGE_MAX_FILE_SIZE_MB=${STORAGE_MAX_FILE_SIZE_MB:-50}
       - STORAGE_MAX_COLUMNS=${STORAGE_MAX_COLUMNS:-500}
+      # Chat settings
       - CHAT_MAX_HISTORY_MESSAGES=${CHAT_MAX_HISTORY_MESSAGES:-20}
       - CHAT_HISTORY_WINDOW_SIZE=${CHAT_HISTORY_WINDOW_SIZE:-6}
       - CHAT_MAX_QUERY_LENGTH=${CHAT_MAX_QUERY_LENGTH:-2000}
+      # Operational
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - APP_DEBUG=${APP_DEBUG:-false}
     volumes:
@@ -123,17 +157,24 @@ services:
       - app_charts:/app/charts
       - app_logs:/app/logs
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8501/_stcore/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8501/_stcore/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
     restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 2G
 
+# ── Networks ───────────────────────────────────────────────────────────────
+networks:
+  datawhisperer:
+    name: datawhisperer-net
+    driver: bridge
+
+# ── Named Volumes ──────────────────────────────────────────────────────────
 volumes:
   ollama_models:
     name: datawhisperer-ollama-models
