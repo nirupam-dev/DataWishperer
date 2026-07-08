@@ -30,7 +30,7 @@ def _create_console_handler(level: str) -> logging.StreamHandler:
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(getattr(logging, level))
     formatter = logging.Formatter(
-        fmt="%(asctime)s │ %(levelname)-8s │ %(name)-30s │ %(message)s",
+        fmt="%(asctime)s | %(levelname)-8s | %(name)-30s | %(message)s",
         datefmt="%H:%M:%S",
     )
     handler.setFormatter(formatter)

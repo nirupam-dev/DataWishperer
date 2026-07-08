@@ -1,0 +1,58 @@
+# ── Python ──────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual Environment ────────────────────────
+.venv/
+venv/
+env/
+
+# ── IDE ─────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.gemini/
+
+# ── Git ─────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Runtime Data ────────────────────────────────
+data/
+uploads/
+charts/
+exports/
+logs/
+htmlcov/
+
+# ── Tests ───────────────────────────────────────
+tests/
+pytest.ini
+.pytest_cache/
+
+# ── Documentation ──────────────────────────────
+docs/
+README.md
+LICENSE
+
+# ── Docker ──────────────────────────────────────
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# ── OS ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Config (copy .env inside, not bake in) ──────
+.env
+.env.example
+Makefile
+pyproject.toml
