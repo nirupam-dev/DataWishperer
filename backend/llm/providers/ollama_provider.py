@@ -214,6 +214,7 @@ class OllamaProvider(BaseLLMProvider):
             tokens_used=tokens_used,
             latency_ms=elapsed_ms,
             finish_reason=finish_reason,
+            provider="ollama",
         )
 
     def health_check(self) -> Dict[str, object]:

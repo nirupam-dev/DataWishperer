@@ -26,10 +26,13 @@ from typing import Optional
 from backend.core.config import get_settings
 from backend.core.logging_config import get_logger
 from backend.llm.agent import DataWhispererAgent
+from backend.llm.base_provider import BaseLLMProvider
 from backend.llm.chains.output_parser import OutputParser
 from backend.llm.chains.query_chain import QueryChain
 from backend.llm.memory import ConversationMemory
 from backend.llm.prompts.registry import PromptRegistry
+from backend.llm.providers.failover_provider import FailoverLLMProvider
+from backend.llm.providers.grok_provider import GrokProvider
 from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.sandbox.executor import SandboxExecutor
 from backend.services.chat_service import ChatService
@@ -39,21 +42,39 @@ from backend.storage.repositories.session_repo import SessionRepository
 logger = get_logger(__name__)
 
 
-def create_provider() -> OllamaProvider:
+def create_provider() -> BaseLLMProvider:
     """
-    Create and return an OllamaProvider instance.
+    Create and return the primary/fallback LLM provider router.
 
     Returns:
-        Configured ``OllamaProvider`` using application settings.
+        Configured ``FailoverLLMProvider`` with Grok primary and Ollama fallback.
     """
     settings = get_settings()
-    provider = OllamaProvider(settings=settings.ollama)
-    logger.info("Created OllamaProvider: model=%s", settings.ollama.model)
+    ollama_provider = OllamaProvider(settings=settings.ollama)
+
+    grok_provider = None
+    if not settings.local_only_mode:
+        try:
+            grok_provider = GrokProvider(settings=settings.grok)
+        except Exception as exc:
+            logger.warning("GrokProvider initialization failed, using Ollama fallback only: %s", str(exc)[:200])
+
+    provider = FailoverLLMProvider(
+        grok_provider=grok_provider,
+        ollama_provider=ollama_provider,
+        local_only_mode=settings.local_only_mode,
+    )
+    logger.info(
+        "Created LLM provider router: grok_model=%s, ollama_model=%s, local_only=%s",
+        settings.grok.model,
+        settings.ollama.model,
+        settings.local_only_mode,
+    )
     return provider
 
 
 def create_agent(
-    provider: Optional[OllamaProvider] = None,
+    provider: Optional[BaseLLMProvider] = None,
 ) -> DataWhispererAgent:
     """
     Create and return a fully-wired DataWhispererAgent.

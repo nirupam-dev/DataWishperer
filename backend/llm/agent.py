@@ -45,9 +45,9 @@ from backend.core.exceptions import (
     OllamaConnectionError,
 )
 from backend.core.logging_config import get_logger
+from backend.llm.base_provider import BaseLLMProvider
 from backend.llm.chains.query_chain import QueryChain
 from backend.llm.memory import ConversationMemory
-from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.models.schemas import (
     CodeExecutionResult,
     FileMetadata,
@@ -99,6 +99,10 @@ class AgentResult:
         latency_ms: float = 0.0,
         attempts: int = 1,
         internal_reasoning: Optional[str] = None,
+        provider_used: Optional[str] = None,
+        model_used: Optional[str] = None,
+        fallback_used: bool = False,
+        fallback_reason: Optional[str] = None,
     ) -> None:
         self.success = success
         self.content = content
@@ -114,6 +118,10 @@ class AgentResult:
         self.latency_ms = latency_ms
         self.attempts = attempts
         self.internal_reasoning = internal_reasoning  # NEVER expose to user
+        self.provider_used = provider_used
+        self.model_used = model_used
+        self.fallback_used = fallback_used
+        self.fallback_reason = fallback_reason
 
 
 class DataWhispererAgent:
@@ -143,7 +151,7 @@ class DataWhispererAgent:
 
     def __init__(
         self,
-        provider: Optional[OllamaProvider] = None,
+        provider: Optional[BaseLLMProvider] = None,
         query_chain: Optional[QueryChain] = None,
         sandbox: Optional[SandboxExecutor] = None,
         memory: Optional[ConversationMemory] = None,
@@ -152,7 +160,12 @@ class DataWhispererAgent:
     ) -> None:
         settings = get_settings()
 
-        self._provider = provider or OllamaProvider()
+        if provider is None:
+            from backend.llm.providers import create_default_provider
+
+            provider = create_default_provider()
+
+        self._provider = provider
         self._memory = memory or ConversationMemory()
         self._chain = query_chain or QueryChain(
             provider=self._provider,
@@ -181,7 +194,7 @@ class DataWhispererAgent:
         return self._chain
 
     @property
-    def provider(self) -> OllamaProvider:
+    def provider(self) -> BaseLLMProvider:
         """Expose the LLM provider."""
         return self._provider
 
@@ -294,12 +307,17 @@ class DataWhispererAgent:
             total_tokens += llm_response.tokens_used
         except (GenerationError, OllamaConnectionError) as e:
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
+            provider_meta = self._get_provider_metadata()
             return AgentResult(
                 success=False,
                 content=self._format_error(e),
                 result_type=ResultType.ERROR,
                 tokens_used=total_tokens,
                 latency_ms=elapsed_ms,
+                provider_used=provider_meta.get("provider"),
+                model_used=provider_meta.get("model"),
+                fallback_used=bool(provider_meta.get("fallback_used", False)),
+                fallback_reason=provider_meta.get("fallback_reason"),
             )
 
         # ── Stage 3: DISPLAY (code is captured in AgentResult.code) ──────
@@ -354,6 +372,7 @@ class DataWhispererAgent:
                 error_content = self._format_debug_failure(
                     first_error, second_error, code
                 )
+                provider_meta = self._get_provider_metadata()
 
                 self._memory.add_user_message(session_id, question)
                 self._memory.add_assistant_message(
@@ -370,6 +389,10 @@ class DataWhispererAgent:
                     latency_ms=elapsed_ms,
                     attempts=2,
                     internal_reasoning=reasoning,
+                    provider_used=provider_meta.get("provider"),
+                    model_used=provider_meta.get("model"),
+                    fallback_used=bool(provider_meta.get("fallback_used", False)),
+                    fallback_reason=provider_meta.get("fallback_reason"),
                 )
 
         # ── Stage 5: OUTPUT (result is captured in AgentResult) ──────────
@@ -377,9 +400,19 @@ class DataWhispererAgent:
 
         # ── Stage 6: EXPLAIN ─────────────────────────────────────────────
         result_summary = self._summarize_result(execution_result)
+        
+        # Build explanation payload with actual data preview
+        data_preview = str(execution_result.data)[:500] if execution_result.data else "No data"
+        if execution_result.result_type == ResultType.DATAFRAME:
+            explanation_payload = f"Returned a data table: {data_preview}"
+        elif execution_result.result_type == ResultType.SERIES:
+            explanation_payload = f"Returned a data series: {data_preview}"
+        else:
+            explanation_payload = data_preview
+
         explanation = self._chain.generate_explanation(
             code=final_code,
-            result_summary=result_summary,
+            result_summary=explanation_payload,
         )
         total_tokens += 50  # Approximate for explanation
 
@@ -397,6 +430,8 @@ class DataWhispererAgent:
         self._memory.add_user_message(session_id, question)
         self._memory.add_assistant_message(session_id, result_summary)
 
+        provider_meta = self._get_provider_metadata()
+
         # ── Format the combined content ──────────────────────────────────
         content = self._format_interpreter_output(
             code=final_code,
@@ -404,6 +439,10 @@ class DataWhispererAgent:
             explanation=explanation,
             chart_explanation=chart_explanation,
             auto_debug_applied=auto_debug_applied,
+            provider_used=provider_meta.get("provider"),
+            model_used=provider_meta.get("model"),
+            fallback_used=bool(provider_meta.get("fallback_used", False)),
+            fallback_reason=provider_meta.get("fallback_reason"),
         )
 
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
@@ -433,6 +472,10 @@ class DataWhispererAgent:
             latency_ms=elapsed_ms,
             attempts=2 if auto_debug_applied else 1,
             internal_reasoning=reasoning,
+            provider_used=provider_meta.get("provider"),
+            model_used=provider_meta.get("model"),
+            fallback_used=bool(provider_meta.get("fallback_used", False)),
+            fallback_reason=provider_meta.get("fallback_reason"),
         )
 
     # ── Auxiliary Capabilities ───────────────────────────────────────────
@@ -451,14 +494,30 @@ class DataWhispererAgent:
 
     def health_check(self) -> Dict[str, Any]:
         """Check the agent's health status."""
-        ollama_health = self._provider.health_check()
+        provider_health = self._provider.health_check()
+
+        if "primary" in provider_health and "fallback" in provider_health:
+            fallback_health = provider_health.get("fallback", {})
+            return {
+                "agent_ready": bool(provider_health.get("ready", False)),
+                "provider_router": provider_health,
+                "primary": provider_health.get("primary", {}),
+                "fallback": fallback_health,
+                "ollama": fallback_health,
+                "model": self._provider.get_model_name(),
+                "local_only_mode": bool(provider_health.get("local_only_mode", False)),
+                "active_sessions": self._memory.get_session_count(),
+                "registered_datasets": len(self._datasets),
+            }
+
         return {
             "agent_ready": (
-                ollama_health.get("connected", False)
-                and ollama_health.get("model_loaded", False)
+                provider_health.get("connected", False)
+                and provider_health.get("model_loaded", False)
             ),
-            "ollama": ollama_health,
+            "ollama": provider_health,
             "model": self._provider.get_model_name(),
+            "local_only_mode": False,
             "active_sessions": self._memory.get_session_count(),
             "registered_datasets": len(self._datasets),
         }
@@ -489,6 +548,10 @@ class DataWhispererAgent:
         explanation: str,
         chart_explanation: Optional[str],
         auto_debug_applied: bool,
+        provider_used: Optional[str] = None,
+        model_used: Optional[str] = None,
+        fallback_used: bool = False,
+        fallback_reason: Optional[str] = None,
     ) -> str:
         """
         Format all pipeline outputs into structured interpreter display.
@@ -524,6 +587,18 @@ class DataWhispererAgent:
         if explanation and explanation != "Analysis complete.":
             sections.append(f"💡 **Explanation:** {explanation}")
 
+        # Section 3.5: Provider metadata
+        if provider_used or model_used:
+            provider_line = (
+                f"🧠 **Model Used:** {provider_used or 'unknown'}"
+                f" · {model_used or 'unknown'}"
+            )
+            if fallback_used:
+                provider_line += " (fallback applied)"
+                if fallback_reason:
+                    provider_line += f" — {fallback_reason[:180]}"
+            sections.append(provider_line)
+
         # Section 4: Chart Reasoning (only for charts)
         if chart_explanation:
             sections.append(f"🎨 **Chart Reasoning:** {chart_explanation}")
@@ -549,6 +624,24 @@ class DataWhispererAgent:
         else:
             data = str(result.data) if result.data else "No data"
             return data[:200]
+
+    def _get_provider_metadata(self) -> Dict[str, Any]:
+        """Best-effort provider metadata for UI/response transparency."""
+        meta_getter = getattr(self._provider, "get_last_generation_metadata", None)
+        if callable(meta_getter):
+            try:
+                metadata = meta_getter()
+                if isinstance(metadata, dict):
+                    return metadata
+            except Exception:
+                logger.debug("Provider metadata getter failed", exc_info=True)
+
+        return {
+            "provider": getattr(self._provider, "__class__", type(self._provider)).__name__.replace("Provider", "").lower(),
+            "model": self._provider.get_model_name(),
+            "fallback_used": False,
+            "fallback_reason": None,
+        }
 
     @staticmethod
     def _format_error(error: Exception) -> str:

@@ -491,16 +491,65 @@ class TestAgentFormatters:
 class TestFactory:
     """Test the agent factory DI container."""
 
+    @patch("backend.llm.factory.FailoverLLMProvider")
+    @patch("backend.llm.factory.GrokProvider")
     @patch("backend.llm.factory.OllamaProvider")
     @patch("backend.llm.factory.get_settings")
-    def test_create_provider(self, mock_settings, mock_cls):
+    def test_create_provider(
+        self,
+        mock_settings,
+        mock_ollama_cls,
+        mock_grok_cls,
+        mock_failover_cls,
+    ):
         from backend.llm.factory import create_provider
+
         settings = MagicMock()
+        settings.local_only_mode = False
+        settings.grok.model = "grok-3-mini"
+        settings.ollama.model = "qwen2.5:7b"
         mock_settings.return_value = settings
-        mock_cls.return_value = MagicMock()
+        mock_ollama = MagicMock()
+        mock_grok = MagicMock()
+        mock_router = MagicMock()
+        mock_ollama_cls.return_value = mock_ollama
+        mock_grok_cls.return_value = mock_grok
+        mock_failover_cls.return_value = mock_router
 
         provider = create_provider()
-        mock_cls.assert_called_once_with(settings=settings.ollama)
+        mock_ollama_cls.assert_called_once_with(settings=settings.ollama)
+        mock_grok_cls.assert_called_once_with(settings=settings.grok)
+        mock_failover_cls.assert_called_once()
+        assert provider is mock_router
+
+    @patch("backend.llm.factory.FailoverLLMProvider")
+    @patch("backend.llm.factory.GrokProvider")
+    @patch("backend.llm.factory.OllamaProvider")
+    @patch("backend.llm.factory.get_settings")
+    def test_create_provider_local_only_skips_grok(
+        self,
+        mock_settings,
+        mock_ollama_cls,
+        mock_grok_cls,
+        mock_failover_cls,
+    ):
+        from backend.llm.factory import create_provider
+
+        settings = MagicMock()
+        settings.local_only_mode = True
+        settings.grok.model = "grok-3-mini"
+        settings.ollama.model = "qwen2.5:7b"
+        mock_settings.return_value = settings
+        mock_ollama = MagicMock()
+        mock_router = MagicMock()
+        mock_ollama_cls.return_value = mock_ollama
+        mock_failover_cls.return_value = mock_router
+
+        provider = create_provider()
+        mock_ollama_cls.assert_called_once_with(settings=settings.ollama)
+        mock_grok_cls.assert_not_called()
+        mock_failover_cls.assert_called_once()
+        assert provider is mock_router
 
     @patch("backend.llm.factory.OllamaProvider")
     @patch("backend.llm.factory.SandboxExecutor")

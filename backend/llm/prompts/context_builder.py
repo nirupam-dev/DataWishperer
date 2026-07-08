@@ -45,6 +45,7 @@ class ContextBuilder:
             self._build_overview(metadata),
             self._build_column_table(metadata.columns),
             self._build_numeric_summary(metadata.columns),
+            self._build_sample_rows(metadata),
             self._build_notes(metadata.columns),
         ]
         return "\n\n".join(filter(None, sections))
@@ -227,3 +228,14 @@ class ContextBuilder:
             return ""
 
         return "NOTES:\n" + "\n".join(notes)
+
+    @staticmethod
+    def _build_sample_rows(metadata: FileMetadata) -> str:
+        """Build a compact sample rows block (max 5 rows)."""
+        if not metadata.sample_rows:
+            return ""
+
+        lines = ["SAMPLE ROWS (max 5):"]
+        for idx, row in enumerate(metadata.sample_rows[:5], start=1):
+            lines.append(f"{idx}. {row}")
+        return "\n".join(lines)

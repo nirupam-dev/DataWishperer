@@ -208,7 +208,7 @@ class PromptRegistry:
         """Build messages for the explanation stage."""
         prompt = EXPLANATION_PROMPT.format(
             code=code[:500],
-            result_summary=result_summary[:300],
+            result_summary=result_summary[:1000],
         )
         return [{"role": "user", "content": prompt}]
 

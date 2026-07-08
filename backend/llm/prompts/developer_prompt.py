@@ -43,14 +43,13 @@ Then write ONLY the code block. Do NOT output your reasoning steps.\
 # Used when the model needs to inspect the dataframe before answering
 
 DATAFRAME_INSPECTION_PROMPT: str = """\
-CRITICAL — Before writing ANY code, verify:
-1. The columns you plan to use EXIST in the dataset context above
-2. The dtypes of those columns match your operations
-3. If a column has nulls, your code handles them
+CRITICAL — Before writing code, mentally verify that the required columns exist in the dataset context and have appropriate dtypes.
+If a needed column is missing, your code should be:
+result = "Cannot answer: column '[name]' not found in dataset"
 
-Column names are CASE-SENSITIVE. Use them EXACTLY as shown in the dataset context.
-Do NOT assume columns exist — if a needed column is missing, set:
-result = "Cannot answer: column '[name]' not found in dataset"\
+If the user asks to "explain" or "describe" data (e.g., "explain the first 5 rows"), write the Pandas code to extract that data (e.g., `result = df.head(5)`). The system will automatically generate the text explanation in the next step.
+
+Otherwise, proceed directly to writing the Pandas code that answers the user's question.\
 """
 
 

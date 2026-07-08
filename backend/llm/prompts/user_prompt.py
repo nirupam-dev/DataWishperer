@@ -32,7 +32,8 @@ def build_user_prompt(
     Returns:
         The assembled user prompt string.
     """
-    parts = [reasoning_preamble, question]
+    formatted_question = f'USER QUESTION:\n"{question}"'
+    parts = [reasoning_preamble, formatted_question]
 
     if error_context:
         parts.append(error_context)

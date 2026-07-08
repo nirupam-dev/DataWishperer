@@ -170,6 +170,64 @@ class GenerationError(LLMError):
         self.error_code = "GENERATION_FAILED"
 
 
+class GrokCredentialsError(LLMError):
+    """Raised when the Grok API key is missing or invalid."""
+
+    def __init__(self, reason: str = "Missing or invalid XAI_API_KEY") -> None:
+        super().__init__(
+            message=f"Grok authentication failed: {reason}",
+            context={"reason": reason},
+            suggestion=(
+                "Set XAI_API_KEY in your environment (or .env), then retry. "
+                "If local-only mode is enabled, Grok is intentionally disabled."
+            ),
+        )
+        self.error_code = "GROK_CREDENTIALS_ERROR"
+
+
+class GrokRateLimitError(LLMError):
+    """Raised when Grok API rate limits requests."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            message="Grok API rate limit reached.",
+            suggestion="Please retry shortly or continue with local fallback.",
+        )
+        self.error_code = "GROK_RATE_LIMIT_ERROR"
+
+
+class GrokAPIError(LLMError):
+    """Raised when Grok API returns an unexpected error."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            message=f"Grok API error: {reason}",
+            context={"reason": reason},
+            suggestion="The system will try the fallback local model automatically.",
+        )
+        self.error_code = "GROK_API_ERROR"
+
+
+class ProviderFallbackError(LLMError):
+    """Raised when both primary and fallback LLM providers fail."""
+
+    def __init__(self, primary_error: str, fallback_error: str) -> None:
+        super().__init__(
+            message=(
+                "Both primary and fallback LLM providers failed. "
+                f"Primary error: {primary_error}. Fallback error: {fallback_error}."
+            ),
+            context={
+                "primary_error": primary_error,
+                "fallback_error": fallback_error,
+            },
+            suggestion=(
+                "Verify XAI_API_KEY for Grok and ensure Ollama is running with a pulled model."
+            ),
+        )
+        self.error_code = "PROVIDER_FALLBACK_ERROR"
+
+
 # ── Sandbox Errors ───────────────────────────────────────────────────────────
 
 

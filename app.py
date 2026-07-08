@@ -11,6 +11,9 @@ Run with:
 from __future__ import annotations
 
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ── Page Config (must be first Streamlit call) ───────────────────────────────
 st.set_page_config(

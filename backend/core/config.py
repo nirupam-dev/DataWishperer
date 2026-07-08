@@ -100,6 +100,33 @@ class OllamaSettings(BaseSettings):
     )
 
 
+class GrokSettings(BaseSettings):
+    """xAI Grok / Groq API configuration."""
+
+    model_config = SettingsConfigDict(env_prefix="GROK_")
+
+    base_url: str = Field(
+        default="https://api.groq.com/openai/v1",
+        description="API base URL (defaults to Groq).",
+    )
+    model: str = Field(
+        default="llama-3.3-70b-versatile",
+        description="Grok/Groq model identifier.",
+    )
+    timeout_seconds: int = Field(
+        default=45,
+        ge=5,
+        le=300,
+        description="HTTP timeout for Grok API requests in seconds.",
+    )
+    max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=8,
+        description="Max Grok retries before falling back to Ollama.",
+    )
+
+
 class SandboxSettings(BaseSettings):
     """Sandboxed code execution configuration."""
 
@@ -247,8 +274,13 @@ class AppSettings(BaseSettings):
     debug: bool = Field(default=False)
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8501)
+    local_only_mode: bool = Field(
+        default=False,
+        description="If true, cloud LLMs are disabled and only local providers are used.",
+    )
 
     # Sub-configurations
+    grok: GrokSettings = Field(default_factory=GrokSettings)
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     sandbox: SandboxSettings = Field(default_factory=SandboxSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)

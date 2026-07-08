@@ -45,7 +45,10 @@ class FileRepository:
             The created ORM ``FileModel``.
         """
         columns_json = json.dumps(
-            [col.model_dump() for col in metadata.columns],
+            {
+                "columns": [col.model_dump() for col in metadata.columns],
+                "sample_rows": (metadata.sample_rows or [])[:5],
+            },
             default=str,
         )
 
@@ -115,9 +118,18 @@ class FileRepository:
         db_file = self.get_by_id_or_raise(file_id)
 
         columns: List[ColumnInfo] = []
+        sample_rows: List[dict] = []
         if db_file.column_metadata:
-            raw_columns = json.loads(db_file.column_metadata)
-            columns = [ColumnInfo(**col) for col in raw_columns]
+            parsed = json.loads(db_file.column_metadata)
+            if isinstance(parsed, list):
+                # Backward compatibility with v1 format
+                columns = [ColumnInfo(**col) for col in parsed]
+            elif isinstance(parsed, dict):
+                raw_columns = parsed.get("columns", [])
+                columns = [ColumnInfo(**col) for col in raw_columns]
+                raw_rows = parsed.get("sample_rows", [])
+                if isinstance(raw_rows, list):
+                    sample_rows = [r for r in raw_rows if isinstance(r, dict)][:5]
 
         return FileMetadata(
             file_id=db_file.id,
@@ -128,6 +140,7 @@ class FileRepository:
             file_size_bytes=db_file.file_size_bytes,
             memory_usage_mb=round(db_file.file_size_bytes / (1024 * 1024), 2),
             columns=columns,
+            sample_rows=sample_rows,
             uploaded_at=db_file.uploaded_at,
         )
 

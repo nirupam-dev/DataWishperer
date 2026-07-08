@@ -224,6 +224,15 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
                 _output["type"] = "dataframe"
                 # Truncate large DataFrames to prevent stdout overflow
                 _truncated = _r.head({max_rows})
+                
+                # Preserve index when converting to records by safely resetting it
+                try:
+                    # Only reset if it's not a default 0-indexed RangeIndex, or if we want to be safe, just reset.
+                    if not (isinstance(_truncated.index, pd.RangeIndex) and _truncated.index.start == 0 and _truncated.index.step == 1):
+                        _truncated = _truncated.reset_index()
+                except Exception:
+                    pass
+                    
                 _output["data"] = _truncated.to_json(
                     orient="records", date_format="iso"
                 )

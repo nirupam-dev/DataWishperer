@@ -152,6 +152,7 @@ class CSVAnalyzer:
             file_size_bytes=path.stat().st_size,
             memory_usage_mb=memory_mb,
             columns=columns,
+            sample_rows=df.head(_SAMPLE_ROWS).astype(str).to_dict(orient="records"),
         )
 
         logger.info(

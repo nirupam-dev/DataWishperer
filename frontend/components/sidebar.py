@@ -169,7 +169,7 @@ def _render_dataset_info() -> None:
 
 
 def _render_health_status() -> None:
-    """Show Ollama/model connection status."""
+    """Show provider router health (Grok primary, Ollama fallback)."""
     agent = get_agent()
 
     if agent is None:
@@ -192,6 +192,9 @@ def _render_health_status() -> None:
 
     try:
         health = agent.health_check()
+        local_only_mode = bool(health.get("local_only_mode", False))
+        provider_router = health.get("provider_router")
+
         if health.get("agent_ready"):
             st.markdown(
                 '<span class="badge badge-success">● Online</span> '
@@ -199,29 +202,43 @@ def _render_health_status() -> None:
                 unsafe_allow_html=True,
             )
         else:
+            st.markdown(
+                '<span class="badge badge-warning">● Degraded</span> '
+                "Provider routing active",
+                unsafe_allow_html=True,
+            )
+
+        mode_text = "ON" if local_only_mode else "OFF"
+        st.caption(f"Local-only mode: {mode_text}")
+
+        if provider_router:
+            primary = health.get("primary", {})
+            fallback = health.get("fallback", {})
+
+            primary_connected = bool(primary.get("connected", False))
+            primary_label = "disabled" if local_only_mode else ("online" if primary_connected else "offline")
+            st.caption(f"Primary (Grok): {primary_label} · model={primary.get('model', 'unknown')}")
+
+            fallback_connected = bool(fallback.get("connected", False))
+            fallback_loaded = bool(fallback.get("model_loaded", False))
+            fallback_label = "online" if fallback_connected and fallback_loaded else "degraded"
+            st.caption(f"Fallback (Ollama): {fallback_label} · model={health.get('model', 'unknown')}")
+
+            if not primary_connected and not local_only_mode and primary.get("error"):
+                st.caption(f"Grok: {str(primary.get('error'))[:140]}")
+            if fallback.get("error"):
+                st.caption(f"Ollama: {str(fallback.get('error'))[:140]}")
+        else:
             ollama_info = health.get("ollama", {})
-            if ollama_info.get("connected"):
-                st.markdown(
-                    '<span class="badge badge-warning">● Model Missing</span>',
-                    unsafe_allow_html=True,
-                )
-                st.caption(
-                    f"Pull the model with:\n"
-                    f"```\nollama pull {health.get('model', 'qwen2.5:7b')}\n```"
-                )
-            else:
-                st.markdown(
-                    '<span class="badge badge-error">● Disconnected</span>',
-                    unsafe_allow_html=True,
-                )
+            if not ollama_info.get("connected"):
                 st.caption("Start Ollama: `ollama serve`")
 
-            if st.button("🔄 Reconnect", use_container_width=True):
-                if reinitialise_agent():
-                    st.success("Connected!")
-                    st.rerun()
-                else:
-                    st.error("Reconnection failed.")
+        if st.button("🔄 Reconnect", use_container_width=True):
+            if reinitialise_agent():
+                st.success("Connected!")
+                st.rerun()
+            else:
+                st.error("Reconnection failed.")
     except Exception:
         st.markdown(
             '<span class="badge badge-error">● Error</span>',

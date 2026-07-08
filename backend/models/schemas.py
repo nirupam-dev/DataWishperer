@@ -80,6 +80,7 @@ class FileMetadata(BaseModel):
     file_size_bytes: int
     memory_usage_mb: float
     columns: List[ColumnInfo]
+    sample_rows: List[Dict[str, Any]] = Field(default_factory=list, max_length=5)
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
 
     @property
@@ -158,6 +159,10 @@ class ChatResponse(BaseModel):
     latency_ms: float = 0.0
     retry_count: int = 0
     auto_debug_applied: bool = False
+    provider_used: Optional[str] = None
+    model_used: Optional[str] = None
+    fallback_used: bool = False
+    fallback_reason: Optional[str] = None
 
 
 # ── Session Schemas ──────────────────────────────────────────────────────────
@@ -234,6 +239,7 @@ class LLMResponse(BaseModel):
     tokens_used: int = 0
     latency_ms: float = 0.0
     finish_reason: str = "stop"
+    provider: str = "unknown"
 
 
 # ── Export Schemas ───────────────────────────────────────────────────────────

@@ -207,6 +207,16 @@ def _render_assistant_message(entry: Dict[str, Any]) -> None:
             "debugged and re-executed."
         )
 
+    # ── Provider Metadata ────────────────────────────────────────
+    provider_label = response.provider_used or "unknown"
+    model_label = response.model_used or "unknown"
+    provider_caption = f"🧠 Model: {provider_label} · {model_label}"
+    if response.fallback_used:
+        provider_caption += " · fallback applied"
+        if response.fallback_reason:
+            provider_caption += f" ({response.fallback_reason[:140]})"
+    st.caption(provider_caption)
+
     # ── Performance ──────────────────────────────────────────────
     perf_parts = []
     if response.latency_ms > 0:
@@ -257,7 +267,26 @@ def _render_table_result(response: ChatResponse) -> None:
 
     try:
         if isinstance(data, str):
-            # Try to parse as markdown table or display as-is
+            try:
+                # The executor returns DataFrames/Series as JSON strings
+                parsed = json.loads(data)
+                if isinstance(parsed, list):
+                    df = pd.DataFrame(parsed)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    return
+                elif isinstance(parsed, dict):
+                    # For Series (dict with scalar values), orient index correctly
+                    if all(not isinstance(v, (dict, list)) for v in parsed.values()):
+                        df = pd.DataFrame([parsed]).T.reset_index()
+                        df.columns = ["Index", "Value"]
+                    else:
+                        df = pd.DataFrame(parsed)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    return
+            except json.JSONDecodeError:
+                pass
+            
+            # Fallback to display as-is
             st.markdown(data)
         elif isinstance(data, (dict, list)):
             df = pd.DataFrame(data)

@@ -175,6 +175,10 @@ class ChatService:
             latency_ms=result.latency_ms,
             retry_count=result.attempts - 1,
             auto_debug_applied=result.auto_debug_applied,
+            provider_used=result.provider_used,
+            model_used=result.model_used,
+            fallback_used=result.fallback_used,
+            fallback_reason=result.fallback_reason,
         )
 
     def get_chat_history(self, session_id: str) -> List[ChatMessage]:

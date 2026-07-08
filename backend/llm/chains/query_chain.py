@@ -36,10 +36,10 @@ from backend.core.exceptions import (
     GenerationError,
 )
 from backend.core.logging_config import get_logger
+from backend.llm.base_provider import BaseLLMProvider
 from backend.llm.chains.output_parser import OutputParser
 from backend.llm.memory import ConversationMemory
 from backend.llm.prompts.registry import PromptRegistry
-from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.models.schemas import FileMetadata, LLMResponse
 
 logger = get_logger(__name__)
@@ -111,7 +111,7 @@ class QueryChain:
 
     def __init__(
         self,
-        provider: OllamaProvider,
+        provider: BaseLLMProvider,
         output_parser: Optional[OutputParser] = None,
         prompt_registry: Optional[PromptRegistry] = None,
         memory: Optional[ConversationMemory] = None,
@@ -189,10 +189,32 @@ class QueryChain:
         # Call the LLM
         llm_response = self._provider.generate(messages)
 
-        # Extract code and reasoning separately
-        code, reasoning = self._parser.extract_code_and_reasoning(
-            llm_response.content
-        )
+        # Extract code and reasoning separately.
+        # If parsing fails and a failover helper exists, force fallback once.
+        try:
+            code, reasoning = self._parser.extract_code_and_reasoning(
+                llm_response.content
+            )
+        except GenerationError as parse_error:
+            fallback_generate = getattr(
+                self._provider,
+                "fallback_on_malformed_output",
+                None,
+            )
+            if callable(fallback_generate):
+                logger.warning(
+                    "Malformed primary LLM output. Forcing fallback generation: %s",
+                    str(parse_error)[:180],
+                )
+                llm_response = fallback_generate(
+                    messages=messages,
+                    reason=str(parse_error),
+                )
+                code, reasoning = self._parser.extract_code_and_reasoning(
+                    llm_response.content
+                )
+            else:
+                raise
 
         if reasoning:
             logger.debug("Internal reasoning: %s", reasoning[:200])
