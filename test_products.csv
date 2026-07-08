@@ -1,0 +1,11 @@
+product_id,product_name,category,price,stock_quantity,rating
+1,Laptop Pro,Electronics,1299.99,50,4.8
+2,Wireless Mouse,Electronics,29.99,200,4.5
+3,Coffee Maker,Home Appliances,89.50,30,4.2
+4,Desk Chair,Furniture,149.00,40,4.6
+5,Bluetooth Speaker,Electronics,59.99,100,4.3
+6,Running Shoes,Apparel,79.95,150,4.7
+7,Water Bottle,Accessories,15.00,300,4.1
+8,Monitor 4K,Electronics,349.00,25,4.9
+9,Table Lamp,Home Appliances,24.50,80,4.0
+10,Backpack,Accessories,45.00,120,4.4
