@@ -49,8 +49,8 @@ VISUALIZATION RULES (when creating charts):
 - Set facecolor: fig.patch.set_facecolor('#1a1a2e'), ax.set_facecolor('#16213e')
 - Use colors from this palette: ['#6C5CE7','#00CEC9','#FD79A8','#FDCB6E','#55EFC4','#A29BFE','#FF7675','#74B9FF']
 - Set text color to '#F0F0F5' for all labels, titles, and ticks
-- Use 300 DPI: plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
-- ALWAYS call plt.close() after plt.savefig()
+- Use 300 DPI: plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor=plt.gcf().get_facecolor())
+- ALWAYS call plt.close('all') after plt.savefig()
 
 CHART TYPE SELECTION (choose the BEST type automatically):
 - Bar chart: comparing categories (<15 groups)
