@@ -436,6 +436,9 @@ def _render_full_assistant_entry(
         if response.latency_ms and response.latency_ms > 0:
             provider_info += f" · {response.latency_ms/1000:.1f}s"
 
+    if provider_info:
+        answer_text += f"\n\n<span style='color:#64748b; font-size:0.65rem;'>{provider_info}</span>"
+
     st.markdown(f"""
 <div style="display:flex; justify-content:flex-start; margin-bottom:0.5rem;">
 <div style="background:rgba(30,32,50,0.85);
@@ -450,9 +453,6 @@ letter-spacing:0.5px;">🤖 DataWhisperer</div>
 
 {answer_text}
 
-<div style="font-size:0.55rem; color:#64748b; margin-top:0.4rem;
-border-top:1px solid rgba(130,160,210,0.08);
-padding-top:0.25rem;">{provider_info}</div>
 </div>
 </div>
 """, unsafe_allow_html=True)

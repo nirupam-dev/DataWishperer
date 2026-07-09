@@ -167,13 +167,7 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
     os.environ["MKL_NUM_THREADS"] = "1"
     os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-    # Memory limit (Unix/Mac only — Windows uses job objects)
-    try:
-        import resource
-        _mem_bytes = {max_memory_mb} * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (_mem_bytes, _mem_bytes))
-    except (ImportError, ValueError, OSError):
-        pass  # Windows or unprivileged — subprocess timeout is the fallback
+    # Memory limits are handled by Streamlit Cloud container (cgroups)
 
     # ── Imports ──────────────────────────────────────────────────────
     import pandas as pd
