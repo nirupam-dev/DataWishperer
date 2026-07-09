@@ -272,7 +272,6 @@ def _render_main_content() -> None:
         _render_dataset_summary_cards()
         _render_question_panel()
         _render_chat_history()
-        _render_results_dashboard()
     else:
         st.markdown("""
         <div style="text-align:center; padding:3rem 0; color:#64748b;">
@@ -373,7 +372,7 @@ def _render_question_panel() -> None:
 
 
 def _render_chat_history() -> None:
-    """Render the full chat conversation history with all user questions and assistant answers."""
+    """Render the full chat conversation history with all user questions and full assistant results."""
     history: List[Dict[str, Any]] = st.session_state.get(CHAT_HISTORY, [])
     if not history:
         return
@@ -391,7 +390,7 @@ def _render_chat_history() -> None:
         content = entry.get("content", "")
 
         if role == "user":
-            # Render user message
+            # Render user message bubble
             st.markdown(f"""
             <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
                 <div style="background:linear-gradient(135deg, #6366f1, #8b5cf6);
@@ -407,48 +406,88 @@ def _render_chat_history() -> None:
             """, unsafe_allow_html=True)
 
         else:
-            # Render assistant message
+            # Render full assistant response with results
             response: Optional[ChatResponse] = entry.get("response")
-
-            # Build the answer text
-            answer_text = ""
-            if response and response.explanation:
-                answer_text = response.explanation
-            elif content:
-                answer_text = content
-            else:
-                answer_text = "Analysis complete. See the results dashboard below."
-
-            # Provider info
-            provider_info = ""
-            if response:
-                if response.provider_used:
-                    provider_info = f"{response.provider_used}"
-                    if response.model_used:
-                        provider_info += f" · {response.model_used}"
-                if response.latency_ms and response.latency_ms > 0:
-                    provider_info += f" · {response.latency_ms/1000:.1f}s"
-
-            st.markdown(f"""
-            <div style="display:flex; justify-content:flex-start; margin-bottom:0.5rem;">
-                <div style="background:rgba(30,32,50,0.85);
-                            border:1px solid rgba(130,160,210,0.12);
-                            color:#e2e8f0; padding:0.65rem 1rem;
-                            border-radius:1rem 1rem 1rem 0.25rem;
-                            max-width:80%; font-size:0.82rem; line-height:1.5;
-                            box-shadow:0 2px 8px rgba(0,0,0,0.15);">
-                    <div style="font-size:0.6rem; font-weight:600; color:#818cf8;
-                                margin-bottom:0.2rem; text-transform:uppercase;
-                                letter-spacing:0.5px;">🤖 DataWhisperer</div>
-                    {answer_text}
-                    <div style="font-size:0.55rem; color:#64748b; margin-top:0.4rem;
-                                border-top:1px solid rgba(130,160,210,0.08);
-                                padding-top:0.25rem;">{provider_info}</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            _render_full_assistant_entry(idx, content, response)
 
     st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+
+
+def _render_full_assistant_entry(
+    idx: int, content: str, response: Optional[ChatResponse]
+) -> None:
+    """Render a complete assistant response: explanation + code + table + chart."""
+
+    # ── Explanation bubble ────────────────────────────────────
+    answer_text = ""
+    if response and response.explanation:
+        answer_text = response.explanation
+    elif content:
+        answer_text = content
+    else:
+        answer_text = "Analysis complete."
+
+    provider_info = ""
+    if response:
+        if response.provider_used:
+            provider_info = f"{response.provider_used}"
+            if response.model_used:
+                provider_info += f" · {response.model_used}"
+        if response.latency_ms and response.latency_ms > 0:
+            provider_info += f" · {response.latency_ms/1000:.1f}s"
+
+    st.markdown(f"""
+    <div style="display:flex; justify-content:flex-start; margin-bottom:0.5rem;">
+        <div style="background:rgba(30,32,50,0.85);
+                    border:1px solid rgba(130,160,210,0.12);
+                    color:#e2e8f0; padding:0.65rem 1rem;
+                    border-radius:1rem 1rem 1rem 0.25rem;
+                    max-width:80%; font-size:0.82rem; line-height:1.5;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+            <div style="font-size:0.6rem; font-weight:600; color:#818cf8;
+                        margin-bottom:0.2rem; text-transform:uppercase;
+                        letter-spacing:0.5px;">🤖 DataWhisperer</div>
+            {answer_text}
+            <div style="font-size:0.55rem; color:#64748b; margin-top:0.4rem;
+                        border-top:1px solid rgba(130,160,210,0.08);
+                        padding-top:0.25rem;">{provider_info}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if response is None:
+        return
+
+    # ── Result panels (inline for this response) ─────────────
+    # Table / data result
+    if response.result_data is not None and response.result_type != ResultType.ERROR:
+        try:
+            df = _parse_result_data(response.result_data)
+            if df is not None:
+                preview_rows = min(5, len(df))
+                st.dataframe(
+                    df.head(preview_rows), use_container_width=True,
+                    hide_index=True,
+                    height=min(200, 36 * preview_rows + 38),
+                )
+                st.caption(f"Showing top {preview_rows} of {len(df)} rows")
+            else:
+                st.markdown(f"```\n{str(response.result_data)[:500]}\n```")
+        except Exception:
+            st.markdown(f"```\n{str(response.result_data)[:500]}\n```")
+
+    # Chart visualization
+    chart_path = response.chart_path
+    if chart_path and Path(chart_path).exists():
+        st.image(chart_path, use_container_width=True)
+
+    # Generated code (collapsible)
+    if response.generated_code:
+        with st.expander(f"📝 Generated Code", expanded=False):
+            st.code(response.generated_code, language="python")
+
+    # Spacer between Q&A pairs
+    st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
 
 def _generate_suggestions(metadata: FileMetadata) -> List[str]:
@@ -470,46 +509,6 @@ def _generate_suggestions(metadata: FileMetadata) -> List[str]:
         target = numeric_cols[0] if numeric_cols else col_names[0]
         suggestions.append(f"Show me the top 10 rows by {target}")
     return suggestions
-
-
-# ══════════════════════════════════════════════════════════════════
-# RESULTS DASHBOARD (2×2 grid)
-# ══════════════════════════════════════════════════════════════════
-
-def _render_results_dashboard() -> None:
-    """Render the 2×2 result panels from the latest assistant response."""
-    history: List[Dict[str, Any]] = st.session_state.get(CHAT_HISTORY, [])
-    if not history:
-        return
-
-    latest_response: Optional[ChatResponse] = None
-    for entry in reversed(history):
-        if entry.get("role") == "assistant" and entry.get("response"):
-            latest_response = entry["response"]
-            break
-
-    if latest_response is None:
-        return
-
-    st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
-
-    # Top row: Result Preview (55%) | Generated SQL (45%)
-    top_left, top_right = st.columns([1.2, 1])
-
-    with top_left:
-        _render_result_preview(latest_response)
-
-    with top_right:
-        _render_generated_sql(latest_response)
-
-    # Bottom row: AI Answer (55%) | Visualization (45%)
-    bot_left, bot_right = st.columns([1.2, 1])
-
-    with bot_left:
-        _render_ai_answer(latest_response)
-
-    with bot_right:
-        _render_visualization(latest_response)
 
 
 def _render_result_preview(response: ChatResponse) -> None:

@@ -31,7 +31,7 @@ def inject_custom_css(page: str = "home") -> None:
     if page == "home":
         bg_b64 = _load_b64("home_bg.png")
     else:
-        bg_b64 = _load_b64("space_bg.png")
+        bg_b64 = _load_b64("starts-bg.png")
 
     bg_rule = ""
     if bg_b64:
@@ -433,6 +433,19 @@ div[data-testid="stChatInput"] textarea {
     color: var(--dw-text-primary) !important;
     font-family: var(--dw-font-family) !important;
     font-size: 0.82rem !important;
+}
+/* Remove dark background behind chat input bar */
+div[data-testid="stBottom"],
+div[data-testid="stBottom"] > div,
+div[data-testid="stBottomBlockContainer"],
+.stChatFloatingInputContainer,
+div.stChatInputContainer {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+div[data-testid="stBottom"]::before {
+    background: transparent !important;
+    display: none !important;
 }
 
 /* File Uploader */
