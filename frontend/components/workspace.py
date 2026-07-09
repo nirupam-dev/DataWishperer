@@ -437,23 +437,25 @@ def _render_full_assistant_entry(
             provider_info += f" · {response.latency_ms/1000:.1f}s"
 
     st.markdown(f"""
-    <div style="display:flex; justify-content:flex-start; margin-bottom:0.5rem;">
-        <div style="background:rgba(30,32,50,0.85);
-                    border:1px solid rgba(130,160,210,0.12);
-                    color:#e2e8f0; padding:0.65rem 1rem;
-                    border-radius:1rem 1rem 1rem 0.25rem;
-                    max-width:80%; font-size:0.82rem; line-height:1.5;
-                    box-shadow:0 2px 8px rgba(0,0,0,0.15);">
-            <div style="font-size:0.6rem; font-weight:600; color:#818cf8;
-                        margin-bottom:0.2rem; text-transform:uppercase;
-                        letter-spacing:0.5px;">🤖 DataWhisperer</div>
-            {answer_text}
-            <div style="font-size:0.55rem; color:#64748b; margin-top:0.4rem;
-                        border-top:1px solid rgba(130,160,210,0.08);
-                        padding-top:0.25rem;">{provider_info}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="display:flex; justify-content:flex-start; margin-bottom:0.5rem;">
+<div style="background:rgba(30,32,50,0.85);
+border:1px solid rgba(130,160,210,0.12);
+color:#e2e8f0; padding:0.65rem 1rem;
+border-radius:1rem 1rem 1rem 0.25rem;
+max-width:80%; font-size:0.82rem; line-height:1.5;
+box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+<div style="font-size:0.6rem; font-weight:600; color:#818cf8;
+margin-bottom:0.2rem; text-transform:uppercase;
+letter-spacing:0.5px;">🤖 DataWhisperer</div>
+
+{answer_text}
+
+<div style="font-size:0.55rem; color:#64748b; margin-top:0.4rem;
+border-top:1px solid rgba(130,160,210,0.08);
+padding-top:0.25rem;">{provider_info}</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
 
     if response is None:
         return

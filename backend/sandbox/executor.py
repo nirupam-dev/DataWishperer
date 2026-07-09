@@ -161,6 +161,11 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
 
     # ── Resource Limits ──────────────────────────────────────────────
     sys.setrecursionlimit({recursion_limit})
+    import os
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+    os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
     # Memory limit (Unix/Mac only — Windows uses job objects)
     try:
@@ -464,6 +469,12 @@ class SandboxExecutor:
         env["PYTHONNOUSERSITE"] = "1"
         # Ensure deterministic hashing
         env["PYTHONHASHSEED"] = "0"
+        
+        # Enforce strict thread limits for Streamlit Cloud (1GB RAM)
+        env["OPENBLAS_NUM_THREADS"] = "1"
+        env["OMP_NUM_THREADS"] = "1"
+        env["MKL_NUM_THREADS"] = "1"
+        env["NUMEXPR_NUM_THREADS"] = "1"
         return env
 
     # ── File Management ──────────────────────────────────────────────────
