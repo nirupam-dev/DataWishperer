@@ -31,7 +31,7 @@ def inject_custom_css(page: str = "home") -> None:
     if page == "home":
         bg_b64 = _load_b64("home_bg.png")
     else:
-        bg_b64 = _load_b64("workspace_bg.png")
+        bg_b64 = _load_b64("space_bg.png")
 
     bg_rule = ""
     if bg_b64:

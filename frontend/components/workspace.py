@@ -265,12 +265,13 @@ def _render_ai_engine_status() -> None:
 # ══════════════════════════════════════════════════════════════════
 
 def _render_main_content() -> None:
-    """Main content area: hero → cards → question → results."""
+    """Main content area: hero → cards → question → chat history → results."""
     _render_workspace_hero()
 
     if has_dataset():
         _render_dataset_summary_cards()
         _render_question_panel()
+        _render_chat_history()
         _render_results_dashboard()
     else:
         st.markdown("""
@@ -328,33 +329,35 @@ def _render_question_panel() -> None:
     """Question input area with suggested questions."""
     st.markdown("")  # spacing
 
-    # Suggested questions
-    metadata: FileMetadata = st.session_state[FILE_METADATA]
-    suggestions = _generate_suggestions(metadata)
+    # Only show suggested questions when there is no chat history yet
+    history: List[Dict[str, Any]] = st.session_state.get(CHAT_HISTORY, [])
+    if not history:
+        metadata: FileMetadata = st.session_state[FILE_METADATA]
+        suggestions = _generate_suggestions(metadata)
 
-    if suggestions:
-        st.markdown("""
-        <div style="font-size:0.78rem; font-weight:600; color:#f1f5f9; margin-bottom:0.4rem;">
-            💡 TRY ASKING:</div>
-        """, unsafe_allow_html=True)
+        if suggestions:
+            st.markdown("""
+            <div style="font-size:0.78rem; font-weight:600; color:#f1f5f9; margin-bottom:0.4rem;">
+                💡 TRY ASKING:</div>
+            """, unsafe_allow_html=True)
 
-        # 2x2 grid
-        row1_cols = st.columns(2)
-        for idx, q in enumerate(suggestions[:2]):
-            with row1_cols[idx]:
-                st.markdown('<div class="suggest-btn">', unsafe_allow_html=True)
-                if st.button(q.upper(), key=f"suggest_{idx}", use_container_width=True):
-                    _submit_question(q)
-                st.markdown('</div>', unsafe_allow_html=True)
-
-        if len(suggestions) > 2:
-            row2_cols = st.columns(2)
-            for idx, q in enumerate(suggestions[2:4]):
-                with row2_cols[idx]:
+            # 2x2 grid
+            row1_cols = st.columns(2)
+            for idx, q in enumerate(suggestions[:2]):
+                with row1_cols[idx]:
                     st.markdown('<div class="suggest-btn">', unsafe_allow_html=True)
-                    if st.button(q.upper(), key=f"suggest_{idx+2}", use_container_width=True):
+                    if st.button(q.upper(), key=f"suggest_{idx}", use_container_width=True):
                         _submit_question(q)
                     st.markdown('</div>', unsafe_allow_html=True)
+
+            if len(suggestions) > 2:
+                row2_cols = st.columns(2)
+                for idx, q in enumerate(suggestions[2:4]):
+                    with row2_cols[idx]:
+                        st.markdown('<div class="suggest-btn">', unsafe_allow_html=True)
+                        if st.button(q.upper(), key=f"suggest_{idx+2}", use_container_width=True):
+                            _submit_question(q)
+                        st.markdown('</div>', unsafe_allow_html=True)
 
     # Question input
     question = st.chat_input("Ask a question about your data...", key="workspace_chat_input")
@@ -367,6 +370,85 @@ def _render_question_panel() -> None:
         <div style="text-align:center; padding:0.4rem; color:#94a3b8; font-size:0.78rem;">
             ⏳ Analyzing your question...</div>
         """, unsafe_allow_html=True)
+
+
+def _render_chat_history() -> None:
+    """Render the full chat conversation history with all user questions and assistant answers."""
+    history: List[Dict[str, Any]] = st.session_state.get(CHAT_HISTORY, [])
+    if not history:
+        return
+
+    st.markdown("""
+    <div style="font-size:0.78rem; font-weight:600; color:#94a3b8;
+                 text-transform:uppercase; letter-spacing:1.2px;
+                 margin:1.2rem 0 0.6rem 0;">
+        💬 CONVERSATION HISTORY
+    </div>
+    """, unsafe_allow_html=True)
+
+    for idx, entry in enumerate(history):
+        role = entry.get("role", "user")
+        content = entry.get("content", "")
+
+        if role == "user":
+            # Render user message
+            st.markdown(f"""
+            <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
+                <div style="background:linear-gradient(135deg, #6366f1, #8b5cf6);
+                            color:#fff; padding:0.65rem 1rem; border-radius:1rem 1rem 0.25rem 1rem;
+                            max-width:75%; font-size:0.82rem; line-height:1.5;
+                            box-shadow:0 2px 8px rgba(99,102,241,0.25);">
+                    <div style="font-size:0.6rem; font-weight:600; opacity:0.8;
+                                margin-bottom:0.2rem; text-transform:uppercase;
+                                letter-spacing:0.5px;">🧑 You</div>
+                    {content}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        else:
+            # Render assistant message
+            response: Optional[ChatResponse] = entry.get("response")
+
+            # Build the answer text
+            answer_text = ""
+            if response and response.explanation:
+                answer_text = response.explanation
+            elif content:
+                answer_text = content
+            else:
+                answer_text = "Analysis complete. See the results dashboard below."
+
+            # Provider info
+            provider_info = ""
+            if response:
+                if response.provider_used:
+                    provider_info = f"{response.provider_used}"
+                    if response.model_used:
+                        provider_info += f" · {response.model_used}"
+                if response.latency_ms and response.latency_ms > 0:
+                    provider_info += f" · {response.latency_ms/1000:.1f}s"
+
+            st.markdown(f"""
+            <div style="display:flex; justify-content:flex-start; margin-bottom:0.5rem;">
+                <div style="background:rgba(30,32,50,0.85);
+                            border:1px solid rgba(130,160,210,0.12);
+                            color:#e2e8f0; padding:0.65rem 1rem;
+                            border-radius:1rem 1rem 1rem 0.25rem;
+                            max-width:80%; font-size:0.82rem; line-height:1.5;
+                            box-shadow:0 2px 8px rgba(0,0,0,0.15);">
+                    <div style="font-size:0.6rem; font-weight:600; color:#818cf8;
+                                margin-bottom:0.2rem; text-transform:uppercase;
+                                letter-spacing:0.5px;">🤖 DataWhisperer</div>
+                    {answer_text}
+                    <div style="font-size:0.55rem; color:#64748b; margin-top:0.4rem;
+                                border-top:1px solid rgba(130,160,210,0.08);
+                                padding-top:0.25rem;">{provider_info}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
 
 
 def _generate_suggestions(metadata: FileMetadata) -> List[str]:
