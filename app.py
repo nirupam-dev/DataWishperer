@@ -11,6 +11,19 @@ Run with:
 
 from __future__ import annotations
 
+import os
+
+# ── CRITICAL: Set BLAS thread limits BEFORE any numpy/pandas import ──────────
+# OpenBLAS reads these at library load time. On Streamlit Cloud (1GB RAM),
+# multi-threaded BLAS can exhaust memory and crash with:
+#   "OpenBLAS error: Memory allocation still failed after 10 retries"
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+os.environ.setdefault("GOTOBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_MAIN_FREE", "1")
+
 import streamlit as st
 from dotenv import load_dotenv
 

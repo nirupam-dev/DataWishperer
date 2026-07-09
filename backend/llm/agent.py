@@ -339,6 +339,44 @@ class DataWhispererAgent:
                 str(first_error)[:150],
             )
 
+            # Short-circuit: environmental errors that LLM cannot fix
+            error_str = str(first_error).lower()
+            is_env_error = (
+                "openblas" in error_str
+                or "memory allocation" in error_str
+                or "cannot allocate memory" in error_str
+            )
+            if is_env_error:
+                elapsed_ms = round((time.time() - start_time) * 1000, 2)
+                provider_meta = self._get_provider_metadata()
+                self._memory.add_user_message(session_id, question)
+                self._memory.add_assistant_message(
+                    session_id, "I couldn't complete this analysis."
+                )
+                return AgentResult(
+                    success=False,
+                    content=(
+                        "❌ **Memory Limit Reached**\n\n"
+                        "The server doesn't have enough memory for this operation. "
+                        "This is a hosting environment limitation, not a code issue.\n\n"
+                        "💡 **Try:**\n"
+                        "- Asking a simpler question (e.g., a specific column average)\n"
+                        "- Breaking the analysis into smaller steps\n"
+                        "- Working with fewer columns"
+                    ),
+                    code=code,
+                    result_type=ResultType.ERROR,
+                    auto_debug_applied=False,
+                    tokens_used=total_tokens,
+                    latency_ms=elapsed_ms,
+                    attempts=1,
+                    internal_reasoning=reasoning,
+                    provider_used=provider_meta.get("provider"),
+                    model_used=provider_meta.get("model"),
+                    fallback_used=bool(provider_meta.get("fallback_used", False)),
+                    fallback_reason=provider_meta.get("fallback_reason"),
+                )
+
             try:
                 # Debug the failed code
                 fixed_code, debug_response = self._chain.debug_code(

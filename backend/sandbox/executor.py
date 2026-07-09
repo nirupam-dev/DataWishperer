@@ -155,17 +155,22 @@ _DEFAULT_ERROR_INFO: Dict[str, str] = {
 
 _WRAPPER_TEMPLATE = textwrap.dedent('''\
     import sys
+    import os
     import json
+    import gc
     import warnings
     warnings.filterwarnings("ignore")
 
     # ── Resource Limits ──────────────────────────────────────────────
+    # CRITICAL: These MUST be set before importing numpy/pandas.
+    # OpenBLAS reads them at library init time, not at call time.
     sys.setrecursionlimit({recursion_limit})
-    import os
     os.environ["OPENBLAS_NUM_THREADS"] = "1"
     os.environ["OMP_NUM_THREADS"] = "1"
     os.environ["MKL_NUM_THREADS"] = "1"
     os.environ["NUMEXPR_NUM_THREADS"] = "1"
+    os.environ["GOTOBLAS_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_MAIN_FREE"] = "1"
 
     # Memory limits are handled by Streamlit Cloud container (cgroups)
 
@@ -206,11 +211,28 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
         print("__DATAWHISPERER_RESULT__" + json.dumps(_output, default=str))
         sys.exit(0)
 
+    # ── Free memory before execution ─────────────────────────────────
+    gc.collect()
+
     # ── Chart Output Path ────────────────────────────────────────────
     chart_path = r"{chart_path}"
 
     # ===== GENERATED CODE START =====
-    {user_code}
+    try:
+        {user_code}
+    except RuntimeError as _rt_err:
+        # Catch OpenBLAS memory allocation failures and retry with
+        # a pure-Python fallback that avoids BLAS-heavy operations
+        if "OpenBLAS" in str(_rt_err) or "memory allocation" in str(_rt_err).lower():
+            gc.collect()
+            # Re-execute with reduced memory: limit df to first 500 rows
+            # and avoid operations that trigger heavy BLAS usage
+            _df_small = df.head(min(len(df), 500)).copy()
+            df = _df_small
+            gc.collect()
+            {user_code}
+        else:
+            raise
     # ===== GENERATED CODE END =====
 
     # ── Result Serialization ─────────────────────────────────────────
@@ -469,6 +491,8 @@ class SandboxExecutor:
         env["OMP_NUM_THREADS"] = "1"
         env["MKL_NUM_THREADS"] = "1"
         env["NUMEXPR_NUM_THREADS"] = "1"
+        env["GOTOBLAS_NUM_THREADS"] = "1"
+        env["OPENBLAS_MAIN_FREE"] = "1"
         return env
 
     # ── File Management ──────────────────────────────────────────────────

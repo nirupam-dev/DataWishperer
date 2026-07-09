@@ -58,7 +58,8 @@ Otherwise, proceed directly to writing the Pandas code that answers the user's q
 
 STATISTICAL_ANALYSIS_PROMPT: str = """\
 STATISTICAL RIGOR REQUIREMENTS:
-- Use .describe() or explicit aggregations, not estimates
+- IMPORTANT: Do NOT call df.describe() on the entire DataFrame — it can exhaust memory on small servers.
+  Instead, use targeted aggregations on specific columns: df['col'].mean(), df[['col1','col2']].describe(), etc.
 - Report sample size (n) alongside statistics
 - Use .median() instead of .mean() for skewed distributions
 - For correlations, use .corr() with method='pearson' or 'spearman'

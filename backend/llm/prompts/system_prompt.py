@@ -71,6 +71,7 @@ CODE QUALITY STANDARDS:
 - Format currency with $ and commas: f"${value:,.2f}"
 - Sort results to show most important data first
 - Limit DataFrames to top 50 rows unless asked otherwise
+- MEMORY EFFICIENCY: Avoid df.describe() on the full DataFrame. Use targeted aggregations (e.g. df['col'].mean()) or df[numeric_cols].describe() on selected columns only.
 
 OUTPUT FORMAT — use this EXACTLY:
 ```python
