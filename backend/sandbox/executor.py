@@ -264,6 +264,13 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
 
     # ── Chart Detection ──────────────────────────────────────────────
     import os.path
+    if len(plt.get_fignums()) > 0:
+        try:
+            plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor=plt.gcf().get_facecolor())
+            plt.close('all')
+        except Exception as e:
+            pass
+            
     if os.path.exists(chart_path) and os.path.getsize(chart_path) > 0:
         _output["chart_generated"] = True
 

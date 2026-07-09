@@ -32,7 +32,7 @@ from backend.llm.chains.query_chain import QueryChain
 from backend.llm.memory import ConversationMemory
 from backend.llm.prompts.registry import PromptRegistry
 from backend.llm.providers.failover_provider import FailoverLLMProvider
-from backend.llm.providers.grok_provider import GrokProvider
+from backend.llm.providers.groq_provider import GrokProvider
 from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.sandbox.executor import SandboxExecutor
 from backend.services.chat_service import ChatService

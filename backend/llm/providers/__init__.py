@@ -5,7 +5,7 @@ from __future__ import annotations
 from backend.core.config import get_settings
 from backend.llm.base_provider import BaseLLMProvider
 from backend.llm.providers.failover_provider import FailoverLLMProvider
-from backend.llm.providers.grok_provider import GrokProvider
+from backend.llm.providers.groq_provider import GrokProvider
 from backend.llm.providers.ollama_provider import OllamaProvider
 
 

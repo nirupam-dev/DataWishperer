@@ -5,7 +5,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://docker.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> **Upload a CSV. Ask questions in plain English. Get tables, charts, and insights — powered entirely by a local AI model. No data leaves your machine.**
+> **Upload a CSV. Ask questions in plain English. Get tables, charts, and insights — powered by Groq (primary) with automatic Ollama local fallback. Your data stays on your machine.**
 
 ---
 
@@ -16,7 +16,7 @@
 | 💬 **Natural Language Queries** | Ask questions about your data in plain English |
 | 🔒 **Secure Sandbox Execution** | Generated code runs in process-isolated sandbox with AST validation |
 | 📊 **Smart Visualization** | Automatic chart type selection with dark-themed rendering |
-| 🧠 **Local AI** | Runs entirely on your machine via Ollama — no API keys, no cloud |
+| 🧠 **Dual AI Providers** | Groq cloud LLM (primary) with automatic Ollama local fallback |
 | 📈 **Advanced Analytics** | Data profiling, statistical analysis, predictive modeling |
 | 📥 **Export** | Download results as CSV, Excel, or chart images |
 
@@ -31,8 +31,8 @@
 │  (Chat · File · Session · Visualization · Export)│
 ├──────────┬──────────┬──────────┬────────────────┤
 │  LLM     │ Sandbox  │Analytics │ Visualization  │
-│ LangChain│ Executor │ Engine   │ Engine         │
-│ + Ollama │ AST Valid│ 8-Stage  │ Chart Selector │
+│Groq+     │ Executor │ Engine   │ Engine         │
+│Ollama   │ AST Valid│ 8-Stage  │ Chart Selector │
 ├──────────┴──────────┴──────────┴────────────────┤
 │          Core (Config · Security · Logging)      │
 ├─────────────────────────────────────────────────┤
@@ -124,8 +124,10 @@ All settings are controlled via environment variables or `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API endpoint |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | LLM model identifier |
+| `GROQ_API_KEY` | _(empty)_ | Groq API key (primary LLM). Leave empty to use Ollama only |
+| `GROK_MODEL` | `llama-3.3-70b-versatile` | Groq model identifier |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API endpoint (fallback) |
+| `OLLAMA_MODEL` | `qwen2.5:7b` | Ollama model identifier |
 | `OLLAMA_TEMPERATURE` | `0.1` | Sampling temperature |
 | `OLLAMA_NUM_CTX` | `4096` | Context window size |
 | `SANDBOX_TIMEOUT` | `30` | Code execution timeout (s) |

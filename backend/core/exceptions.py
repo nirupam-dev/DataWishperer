@@ -171,15 +171,15 @@ class GenerationError(LLMError):
 
 
 class GrokCredentialsError(LLMError):
-    """Raised when the Grok API key is missing or invalid."""
+    """Raised when the Groq API key is missing or invalid."""
 
-    def __init__(self, reason: str = "Missing or invalid XAI_API_KEY") -> None:
+    def __init__(self, reason: str = "Missing or invalid GROQ_API_KEY") -> None:
         super().__init__(
-            message=f"Grok authentication failed: {reason}",
+            message=f"Groq authentication failed: {reason}",
             context={"reason": reason},
             suggestion=(
-                "Set XAI_API_KEY in your environment (or .env), then retry. "
-                "If local-only mode is enabled, Grok is intentionally disabled."
+                "Set GROQ_API_KEY in your environment (or .env), then retry. "
+                "If local-only mode is enabled, Groq is intentionally disabled."
             ),
         )
         self.error_code = "GROK_CREDENTIALS_ERROR"
@@ -222,7 +222,7 @@ class ProviderFallbackError(LLMError):
                 "fallback_error": fallback_error,
             },
             suggestion=(
-                "Verify XAI_API_KEY for Grok and ensure Ollama is running with a pulled model."
+                "Verify GROQ_API_KEY for Groq and ensure Ollama is running with a pulled model."
             ),
         )
         self.error_code = "PROVIDER_FALLBACK_ERROR"

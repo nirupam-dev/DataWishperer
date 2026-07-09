@@ -33,13 +33,13 @@ Result: {result_summary}
 
 Write a clear, brief explanation (2-4 sentences):
 - What the code does in simple terms (no jargon)
-- Key findings with specific numbers
+- Key findings with specific numbers (ONLY if numbers are present in the Result)
 - Any notable patterns
 
 Rules:
 - Do NOT include any code or technical terms
 - Do NOT say "the code does X" — say "the analysis shows X"
-- Be specific about numbers, not vague\
+- Be specific about numbers IF they are in the Result, but NEVER invent, guess, or hallucinate numbers. If the Result is just a message (e.g. "chart saved"), describe what the chart represents without making up data.\
 """
 
 

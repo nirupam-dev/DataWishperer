@@ -42,8 +42,8 @@ def render_sidebar() -> None:
     """Render the complete sidebar."""
     with st.sidebar:
         # ── Brand Header ─────────────────────────────────────────
-        st.markdown("# 🔮 DataWhisperer")
-        st.caption("Talk to your CSV with AI")
+        st.markdown("# DATAWHISPERER")
+        st.caption("TALK TO YOUR CSV WITH AI")
         st.divider()
 
         # ── File Upload ──────────────────────────────────────────
@@ -68,7 +68,7 @@ def render_sidebar() -> None:
 
 def _render_upload_section() -> None:
     """Render the CSV upload widget."""
-    st.markdown("### 📁 Upload Dataset")
+    st.markdown("### UPLOAD DATASET")
 
     uploaded_file = st.file_uploader(
         "Choose a CSV file",
@@ -153,8 +153,8 @@ def _render_dataset_info() -> None:
     if metadata is None:
         return
 
-    st.markdown("### 📊 Active Dataset")
-    st.markdown(f"**{metadata.original_name}**")
+    st.markdown("### ACTIVE DATASET")
+    st.markdown(f"**{metadata.original_name.upper()}**")
 
     col1, col2 = st.columns(2)
     col1.metric("Rows", f"{metadata.row_count:,}")
@@ -163,7 +163,7 @@ def _render_dataset_info() -> None:
     st.caption(f"Memory: {metadata.memory_usage_mb:.1f} MB")
     st.caption(f"Size: {format_file_size(metadata.file_size_bytes)}")
 
-    if st.button("🗑️ Clear Dataset", use_container_width=True):
+    if st.button("CLEAR DATASET", use_container_width=True):
         clear_dataset()
         st.rerun()
 
@@ -182,7 +182,7 @@ def _render_health_status() -> None:
             "Ollama may not be running. Start it with:\n"
             "```\nollama serve\n```"
         )
-        if st.button("🔄 Reconnect", use_container_width=True):
+        if st.button("RECONNECT", use_container_width=True):
             if reinitialise_agent():
                 st.success("Connected!")
                 st.rerun()
@@ -233,7 +233,7 @@ def _render_health_status() -> None:
             if not ollama_info.get("connected"):
                 st.caption("Start Ollama: `ollama serve`")
 
-        if st.button("🔄 Reconnect", use_container_width=True):
+        if st.button("RECONNECT", use_container_width=True):
             if reinitialise_agent():
                 st.success("Connected!")
                 st.rerun()
@@ -248,7 +248,7 @@ def _render_health_status() -> None:
 
 def _render_settings_section() -> None:
     """Render basic model settings."""
-    with st.expander("⚙️ Settings", expanded=False):
+    with st.expander("SETTINGS", expanded=False):
         settings = get_settings()
 
         st.text_input(

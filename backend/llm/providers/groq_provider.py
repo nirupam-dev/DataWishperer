@@ -1,8 +1,9 @@
 """
-Grok LLM provider — LangChain ChatOpenAI integration against xAI API.
+Groq LLM provider — LangChain ChatOpenAI integration against Groq API.
 
-Uses xAI's official API endpoint (https://api.x.ai/v1) through LangChain's
-ChatOpenAI wrapper so the project keeps a consistent LangChain pipeline.
+Uses Groq's official API endpoint (https://api.groq.com/openai/v1) through
+LangChain's ChatOpenAI wrapper so the project keeps a consistent pipeline.
+Groq is the PRIMARY LLM provider; Ollama is the fallback.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ from backend.models.schemas import LLMResponse
 
 logger = get_logger(__name__)
 
-_XAI_BASE_URL = "https://api.x.ai/v1"
+# Groq is the primary cloud provider; key accepted via GROQ_API_KEY or XAI_API_KEY
 
 
 def _dict_to_langchain_message(msg: Dict[str, str]) -> BaseMessage:
@@ -49,11 +50,15 @@ def _dict_to_langchain_message(msg: Dict[str, str]) -> BaseMessage:
 
 
 class GrokProvider(BaseLLMProvider):
-    """xAI Grok provider with retry and error classification."""
+    """Groq cloud LLM provider with retry and error classification."""
 
     def __init__(self, settings: Optional[GrokSettings] = None) -> None:
         self._settings = settings or get_settings().grok
-        self._api_key = os.getenv("XAI_API_KEY", "").strip()
+        # Accept GROQ_API_KEY (preferred) or XAI_API_KEY (legacy) for compatibility
+        self._api_key = (
+            os.getenv("GROQ_API_KEY", "").strip()
+            or os.getenv("XAI_API_KEY", "").strip()
+        )
         self._llm = self._create_llm()
 
         logger.info(
@@ -65,7 +70,7 @@ class GrokProvider(BaseLLMProvider):
         )
 
     def _create_llm(
-        self,
+        self,  # noqa: D102
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> ChatOpenAI:
@@ -82,7 +87,10 @@ class GrokProvider(BaseLLMProvider):
 
     def _ensure_credentials(self) -> None:
         if not self._api_key:
-            raise GrokCredentialsError("XAI_API_KEY is missing")
+            raise GrokCredentialsError(
+                "GROQ_API_KEY (or XAI_API_KEY) is missing. "
+                "Set it in your .env file to enable Groq as the primary provider."
+            )
 
     def generate(
         self,
@@ -127,14 +135,14 @@ class GrokProvider(BaseLLMProvider):
                     tokens_used=tokens_used,
                     latency_ms=elapsed_ms,
                     finish_reason=finish_reason,
-                    provider="grok",
+                    provider="Groq",
                 )
             except Exception as e:
                 last_error = e
                 error_str = str(e).lower()
 
                 if "401" in error_str or "unauthorized" in error_str or "invalid api key" in error_str:
-                    raise GrokCredentialsError("Invalid XAI_API_KEY")
+                    raise GrokCredentialsError("Invalid GROQ_API_KEY (or XAI_API_KEY)")
                 if "429" in error_str or "rate" in error_str:
                     if attempt < attempts:
                         logger.warning("Grok rate-limited (attempt %d/%d), retrying", attempt, attempts)
@@ -153,14 +161,14 @@ class GrokProvider(BaseLLMProvider):
         raise GrokAPIError(str(last_error)[:300] if last_error else "Unknown Grok API error")
 
     def health_check(self) -> Dict[str, object]:
-        """Return configuration-level health for Grok."""
+        """Return configuration-level health for Groq."""
         key_present = bool(self._api_key)
         return {
             "connected": key_present,
             "model_loaded": key_present,
             "credentials_present": key_present,
             "model": self._settings.model,
-            "error": None if key_present else "Missing XAI_API_KEY",
+            "error": None if key_present else "Missing GROQ_API_KEY",
         }
 
     def get_model_name(self) -> str:

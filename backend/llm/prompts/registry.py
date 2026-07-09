@@ -258,7 +258,7 @@ class PromptRegistry:
             )
 
         return [
-            {"role": "system", "content": SYSTEM_PROMPT_COMPACT},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": debug_prompt},
         ]
 

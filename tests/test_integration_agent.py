@@ -125,6 +125,10 @@ class TestQueryChainGeneration:
     ):
         from backend.core.exceptions import GenerationError
         mock_provider.generate.return_value = mock_llm_response("")
+        # Disable the auto-created fallback_on_malformed_output so the
+        # chain re-raises GenerationError instead of attempting a fallback
+        # with a non-LLMResponse mock.
+        mock_provider.fallback_on_malformed_output = None
         with pytest.raises(GenerationError):
             query_chain.generate_code(
                 question="Something",

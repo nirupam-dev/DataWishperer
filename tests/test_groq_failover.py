@@ -1,4 +1,4 @@
-"""Tests for Grok/Ollama failover routing and safety fallbacks."""
+"""Tests for Groq/Ollama failover routing and safety fallbacks."""
 
 from __future__ import annotations
 
@@ -26,14 +26,16 @@ def sample_messages():
 def test_grok_success_no_ollama_call(sample_messages):
     grok = MagicMock()
     ollama = MagicMock()
-    grok.generate.return_value = LLMResponse(content="ok", model="grok-3-mini", provider="grok")
+    grok.generate.return_value = LLMResponse(content="ok", model="llama-3.3-70b-versatile", provider="Groq")
 
     provider = FailoverLLMProvider(grok_provider=grok, ollama_provider=ollama, local_only_mode=False)
     response = provider.generate(sample_messages)
 
-    assert response.provider == "grok"
+    assert response.provider == "Groq"
     grok.generate.assert_called_once()
     ollama.generate.assert_not_called()
+    meta = provider.get_last_generation_metadata()
+    assert meta["provider"] == "Groq"
 
 
 def test_grok_failure_then_ollama_success(sample_messages):
@@ -50,6 +52,7 @@ def test_grok_failure_then_ollama_success(sample_messages):
     ollama.generate.assert_called_once()
     meta = provider.get_last_generation_metadata()
     assert meta["fallback_used"] is True
+    assert meta["provider"] == "Ollama Fallback"
 
 
 def test_both_providers_fail_raises_provider_fallback_error(sample_messages):
@@ -64,10 +67,10 @@ def test_both_providers_fail_raises_provider_fallback_error(sample_messages):
         provider.generate(sample_messages)
 
 
-def test_missing_xai_api_key_falls_back_to_ollama(sample_messages):
+def test_missing_groq_api_key_falls_back_to_ollama(sample_messages):
     grok = MagicMock()
     ollama = MagicMock()
-    grok.generate.side_effect = GrokCredentialsError("XAI_API_KEY is missing")
+    grok.generate.side_effect = GrokCredentialsError("GROQ_API_KEY is missing")
     ollama.generate.return_value = LLMResponse(content="ok", model="qwen2.5:7b", provider="ollama")
 
     provider = FailoverLLMProvider(grok_provider=grok, ollama_provider=ollama, local_only_mode=False)
@@ -76,7 +79,8 @@ def test_missing_xai_api_key_falls_back_to_ollama(sample_messages):
     assert response.provider == "ollama"
     meta = provider.get_last_generation_metadata()
     assert meta["fallback_used"] is True
-    assert "xai_api_key" in str(meta["fallback_reason"]).lower()
+    assert meta["provider"] == "Ollama Fallback"
+    assert "groq_api_key" in str(meta["fallback_reason"]).lower()
 
 
 def test_local_only_mode_skips_grok(sample_messages):
@@ -106,7 +110,7 @@ def test_dangerous_code_rejection_sandbox_validation_path(sample_file_metadata):
     chain = MagicMock(spec=QueryChain)
     chain.generate_code.return_value = (
         "import os\nresult = 1",
-        LLMResponse(content="code", model="grok-3-mini", provider="grok", tokens_used=10),
+        LLMResponse(content="code", model="llama-3.3-70b-versatile", provider="Groq", tokens_used=10),
         None,
     )
     chain.debug_code.side_effect = GenerationError("cannot safely repair")

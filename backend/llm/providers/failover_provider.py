@@ -1,4 +1,4 @@
-"""Provider router: Grok primary, Ollama fallback."""
+"""Provider router: Groq primary, Ollama fallback."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from backend.core.exceptions import ProviderFallbackError
 from backend.core.logging_config import get_logger
 from backend.llm.base_provider import BaseLLMProvider
-from backend.llm.providers.grok_provider import GrokProvider
+from backend.llm.providers.groq_provider import GrokProvider
 from backend.llm.providers.ollama_provider import OllamaProvider
 from backend.models.schemas import LLMResponse
 
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 class FailoverLLMProvider(BaseLLMProvider):
-    """Routes LLM generation to Grok first, then Ollama on failure."""
+    """Routes LLM generation to Groq first, then Ollama on failure."""
 
     def __init__(
         self,
@@ -39,7 +39,7 @@ class FailoverLLMProvider(BaseLLMProvider):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
-        """Generate via Grok first (unless local-only), then fallback to Ollama."""
+        """Generate via Groq first (unless local-only), then fallback to Ollama."""
         if self._local_only_mode or self._grok is None:
             response = self._ollama.generate(
                 messages,
@@ -47,10 +47,10 @@ class FailoverLLMProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
             )
             self._last_generation = {
-                "provider": "ollama",
+                "provider": "Ollama Fallback" if self._local_only_mode else "Ollama",
                 "model": response.model,
                 "fallback_used": False,
-                "fallback_reason": "Local Only Mode enabled" if self._local_only_mode else "Grok unavailable",
+                "fallback_reason": "Local Only Mode enabled" if self._local_only_mode else "Groq unavailable",
             }
             return response
 
@@ -61,7 +61,7 @@ class FailoverLLMProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
             )
             self._last_generation = {
-                "provider": "grok",
+                "provider": "Groq",
                 "model": response.model,
                 "fallback_used": False,
                 "fallback_reason": None,
@@ -69,7 +69,7 @@ class FailoverLLMProvider(BaseLLMProvider):
             return response
         except Exception as grok_error:
             grok_reason = str(grok_error)[:240]
-            logger.warning("Grok failed, falling back to Ollama: %s", grok_reason)
+            logger.warning("Groq failed, falling back to Ollama: %s", grok_reason)
 
             try:
                 response = self._ollama.generate(
@@ -78,7 +78,7 @@ class FailoverLLMProvider(BaseLLMProvider):
                     max_tokens=max_tokens,
                 )
                 self._last_generation = {
-                    "provider": "ollama",
+                    "provider": "Ollama Fallback",
                     "model": response.model,
                     "fallback_used": True,
                     "fallback_reason": grok_reason,
@@ -97,17 +97,17 @@ class FailoverLLMProvider(BaseLLMProvider):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
-        """Force fallback when Grok response is malformed for parser extraction."""
+        """Force fallback when Groq response is malformed for parser extraction."""
         response = self._ollama.generate(
             messages,
             temperature=temperature,
             max_tokens=max_tokens,
         )
         self._last_generation = {
-            "provider": "ollama",
+            "provider": "Ollama Fallback",
             "model": response.model,
             "fallback_used": True,
-            "fallback_reason": f"Malformed Grok output: {reason[:180]}",
+            "fallback_reason": f"Malformed Groq output: {reason[:180]}",
         }
         return response
 

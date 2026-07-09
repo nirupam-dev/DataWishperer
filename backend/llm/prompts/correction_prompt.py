@@ -50,9 +50,13 @@ DEBUG INSTRUCTIONS:
    - Add pd.to_numeric(errors='coerce') for type conversions
    - Add column existence checks where appropriate
 5. PRESERVE the same analytical intent — fix the bug, NOT the analysis
+6. If the original code was generating a chart:
+   - YOU MUST STILL CALL plt.savefig(chart_path)
+   - Assign the UNDERLYING DATA to `result` (e.g., the filtered DataFrame/Series)
+   - NEVER assign the Matplotlib axes/figure to `result`.
 
 OUTPUT: Write the corrected code in ```python ... ``` fences.
-Assign the final answer to `result`.\
+Assign the final data answer to `result`.\
 """
 
 
@@ -75,7 +79,7 @@ COMMON FIX PATTERNS:
 - IndexError → empty result. Add len() check before indexing.
 
 Write corrected code in ```python ... ``` fences.
-Assign the final answer to `result`.
+Assign the final answer to `result` (if chart, assign underlying data, NOT axes. Call plt.savefig).
 Output ONLY the code block.\
 """
 
