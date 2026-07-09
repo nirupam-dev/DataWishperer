@@ -264,13 +264,33 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
 
     # ── Chart Detection ──────────────────────────────────────────────
     import os.path
+    import glob as _glob
+    import shutil as _shutil
+
+    # Primary: check if matplotlib figures exist and save them
     if len(plt.get_fignums()) > 0:
         try:
             plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor=plt.gcf().get_facecolor())
             plt.close('all')
         except Exception as e:
             pass
-            
+
+    # Fallback: if the LLM hardcoded a filename instead of using chart_path,
+    # find any PNG files created in the working directory and use the first one
+    if not (os.path.exists(chart_path) and os.path.getsize(chart_path) > 0):
+        _cwd_pngs = _glob.glob("*.png")
+        # Filter to only recently-created files (within last 60 seconds)
+        import time as _time
+        _now = _time.time()
+        _recent_pngs = [p for p in _cwd_pngs if (_now - os.path.getmtime(p)) < 60]
+        if _recent_pngs:
+            # Use the most recently modified PNG
+            _recent_pngs.sort(key=os.path.getmtime, reverse=True)
+            try:
+                _shutil.copy2(_recent_pngs[0], chart_path)
+            except Exception:
+                pass
+
     if os.path.exists(chart_path) and os.path.getsize(chart_path) > 0:
         _output["chart_generated"] = True
 
