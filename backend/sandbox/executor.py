@@ -218,21 +218,7 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
     chart_path = r"{chart_path}"
 
     # ===== GENERATED CODE START =====
-    try:
-        {user_code}
-    except RuntimeError as _rt_err:
-        # Catch OpenBLAS memory allocation failures and retry with
-        # a pure-Python fallback that avoids BLAS-heavy operations
-        if "OpenBLAS" in str(_rt_err) or "memory allocation" in str(_rt_err).lower():
-            gc.collect()
-            # Re-execute with reduced memory: limit df to first 500 rows
-            # and avoid operations that trigger heavy BLAS usage
-            _df_small = df.head(min(len(df), 500)).copy()
-            df = _df_small
-            gc.collect()
-            {user_code}
-        else:
-            raise
+    {user_code}
     # ===== GENERATED CODE END =====
 
     # ── Result Serialization ─────────────────────────────────────────
