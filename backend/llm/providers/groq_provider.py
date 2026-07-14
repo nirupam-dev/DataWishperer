@@ -4,6 +4,9 @@ Groq LLM provider — LangChain ChatOpenAI integration against Groq API.
 Uses Groq's official API endpoint (https://api.groq.com/openai/v1) through
 LangChain's ChatOpenAI wrapper so the project keeps a consistent pipeline.
 Groq is the PRIMARY LLM provider; Ollama is the fallback.
+
+Supports multiple API keys (GROQ_API_KEY, GROQ_API_KEY_2, …) for automatic
+rotation when a key hits rate-limits, quota exhaustion, or auth errors.
 """
 
 from __future__ import annotations
@@ -50,31 +53,82 @@ def _dict_to_langchain_message(msg: Dict[str, str]) -> BaseMessage:
 
 
 class GrokProvider(BaseLLMProvider):
-    """Groq cloud LLM provider with retry and error classification."""
+    """Groq cloud LLM provider with retry, error classification, and API key rotation."""
 
     def __init__(self, settings: Optional[GrokSettings] = None) -> None:
         self._settings = settings or get_settings().grok
-        # Accept GROQ_API_KEY (preferred) or XAI_API_KEY (legacy) for compatibility
-        self._api_key = (
-            os.getenv("GROQ_API_KEY", "").strip()
-            or os.getenv("XAI_API_KEY", "").strip()
-        )
+
+        # Collect all available API keys for rotation.
+        # Accepts GROQ_API_KEY, GROQ_API_KEY_2, …, and XAI_API_KEY (legacy).
+        self._api_keys = self._collect_api_keys()
+        self._active_key_index = 0
+        self._api_key = self._api_keys[0] if self._api_keys else ""
+
         self._llm = self._create_llm()
 
         logger.info(
-            "GrokProvider initialized: model=%s, timeout=%ss, retries=%d, key_present=%s",
+            "GrokProvider initialized: model=%s, timeout=%ss, retries=%d, "
+            "api_keys_available=%d, active_key_index=%d",
             self._settings.model,
             self._settings.timeout_seconds,
             self._settings.max_retries,
-            bool(self._api_key),
+            len(self._api_keys),
+            self._active_key_index,
         )
+
+    @staticmethod
+    def _collect_api_keys() -> List[str]:
+        """Gather all non-empty Groq API keys from the environment.
+
+        Checks GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3, … (up to 10),
+        plus XAI_API_KEY as a legacy fallback.
+        """
+        keys: List[str] = []
+        # Primary key
+        primary = os.getenv("GROQ_API_KEY", "").strip()
+        if primary:
+            keys.append(primary)
+        # Numbered backup keys: GROQ_API_KEY_2 … GROQ_API_KEY_10
+        for i in range(2, 11):
+            k = os.getenv(f"GROQ_API_KEY_{i}", "").strip()
+            if k:
+                keys.append(k)
+        # Legacy alias
+        legacy = os.getenv("XAI_API_KEY", "").strip()
+        if legacy and legacy not in keys:
+            keys.append(legacy)
+        return keys
+
+    def _rotate_api_key(self) -> bool:
+        """Rotate to the next available API key.
+
+        Returns True if a new key was activated, False if no more keys remain.
+        """
+        if len(self._api_keys) <= 1:
+            return False
+
+        next_index = (self._active_key_index + 1) % len(self._api_keys)
+        if next_index == self._active_key_index:
+            return False  # Full circle — no fresh key available
+
+        self._active_key_index = next_index
+        self._api_key = self._api_keys[next_index]
+        # Rebuild the default LLM client with the new key
+        self._llm = self._create_llm()
+
+        logger.info(
+            "Rotated Groq API key → index %d/%d",
+            next_index + 1,
+            len(self._api_keys),
+        )
+        return True
 
     def _create_llm(
         self,  # noqa: D102
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> ChatOpenAI:
-        """Create a ChatOpenAI client configured for xAI API."""
+        """Create a ChatOpenAI client configured for Groq API."""
         return ChatOpenAI(
             model=self._settings.model,
             api_key=self._api_key or "MISSING_KEY",
@@ -88,8 +142,8 @@ class GrokProvider(BaseLLMProvider):
     def _ensure_credentials(self) -> None:
         if not self._api_key:
             raise GrokCredentialsError(
-                "GROQ_API_KEY (or XAI_API_KEY) is missing. "
-                "Set it in your .env file to enable Groq as the primary provider."
+                "No GROQ_API_KEY found. "
+                "Set GROQ_API_KEY (and optionally GROQ_API_KEY_2) in your .env file."
             )
 
     def generate(
@@ -98,7 +152,11 @@ class GrokProvider(BaseLLMProvider):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> LLMResponse:
-        """Generate a response from Grok with bounded retries."""
+        """Generate a response from Groq with bounded retries and API key rotation.
+
+        On rate-limit (429) or auth (401) errors, the provider automatically
+        rotates to the next available API key before retrying.
+        """
         self._ensure_credentials()
 
         llm = self._llm
@@ -109,6 +167,8 @@ class GrokProvider(BaseLLMProvider):
 
         attempts = self._settings.max_retries + 1
         last_error: Optional[Exception] = None
+        # Track which keys we've already tried to avoid infinite loops
+        keys_tried: set[int] = {self._active_key_index}
 
         for attempt in range(1, attempts + 1):
             start_time = time.time()
@@ -141,13 +201,39 @@ class GrokProvider(BaseLLMProvider):
                 last_error = e
                 error_str = str(e).lower()
 
-                if "401" in error_str or "unauthorized" in error_str or "invalid api key" in error_str:
-                    raise GrokCredentialsError("Invalid GROQ_API_KEY (or XAI_API_KEY)")
-                if "429" in error_str or "rate" in error_str:
-                    if attempt < attempts:
-                        logger.warning("Grok rate-limited (attempt %d/%d), retrying", attempt, attempts)
-                        continue
+                # ── Key-rotatable errors (auth / rate-limit / quota) ────
+                is_auth_error = (
+                    "401" in error_str
+                    or "unauthorized" in error_str
+                    or "invalid api key" in error_str
+                )
+                is_rate_limit = "429" in error_str or "rate" in error_str
+
+                if is_auth_error or is_rate_limit:
+                    # Try rotating to the next API key
+                    rotated = self._rotate_api_key()
+                    if rotated and self._active_key_index not in keys_tried:
+                        keys_tried.add(self._active_key_index)
+                        # Rebuild the LLM with the rotated key
+                        llm = self._create_llm(
+                            temperature=temperature, max_tokens=max_tokens
+                        )
+                        error_kind = "auth" if is_auth_error else "rate-limit"
+                        logger.warning(
+                            "Groq %s error — rotated to API key %d/%d, retrying",
+                            error_kind,
+                            self._active_key_index + 1,
+                            len(self._api_keys),
+                        )
+                        continue  # retry immediately with new key
+
+                    # No more keys to try
+                    if is_auth_error:
+                        raise GrokCredentialsError(
+                            "All GROQ_API_KEY(s) are invalid or expired."
+                        )
                     raise GrokRateLimitError()
+
                 if "timeout" in error_str:
                     if attempt < attempts:
                         logger.warning("Grok timeout (attempt %d/%d), retrying", attempt, attempts)
@@ -168,6 +254,8 @@ class GrokProvider(BaseLLMProvider):
             "model_loaded": key_present,
             "credentials_present": key_present,
             "model": self._settings.model,
+            "api_keys_available": len(self._api_keys),
+            "active_key_index": self._active_key_index + 1,
             "error": None if key_present else "Missing GROQ_API_KEY",
         }
 
