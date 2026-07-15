@@ -1,15 +1,17 @@
 """
-Chart Themes — Dark theme system and publication-quality figure styling.
+Chart Themes — Premium dashboard theme system and publication-quality figure styling.
 
 Provides a centralized theming engine that produces consistent, beautiful
 charts across all chart types and rendering backends (matplotlib + Plotly).
 
 Design Philosophy:
-    - Every chart should look publication-ready out of the box
+    - Every chart should look like a premium SaaS dashboard widget
     - Dark theme is the default (matches modern data tools aesthetic)
     - Colorblind-safe palettes are used throughout
+    - All spines removed for clean, modern appearance
+    - Subtle grid lines that don't compete with data
+    - High DPI (250) for crisp rendering
     - Typography uses Inter/system fonts for crisp rendering
-    - High DPI (300) for print-quality exports
 
 Theme Hierarchy:
     1. Base theme (dark/light mode colors)
@@ -30,16 +32,16 @@ import numpy as np
 
 # ── Color Palettes ───────────────────────────────────────────────────────────
 
-# Primary palette: curated for dark backgrounds, colorblind-safe
+# Primary palette: curated vibrant colors for dark backgrounds
 PALETTE_PRIMARY: List[str] = [
-    "#6C5CE7",  # Soft purple
-    "#00CEC9",  # Teal
-    "#FD79A8",  # Pink
-    "#FDCB6E",  # Gold
-    "#55EFC4",  # Mint
-    "#A29BFE",  # Lavender
-    "#FF7675",  # Coral
-    "#74B9FF",  # Sky blue
+    "#8B5CF6",  # Vivid purple
+    "#06D6A0",  # Mint/teal
+    "#F72585",  # Hot pink
+    "#FFD166",  # Gold
+    "#4CC9F0",  # Sky blue
+    "#A78BFA",  # Lavender
+    "#EF476F",  # Coral red
+    "#118AB2",  # Deep blue
     "#E17055",  # Burnt orange
     "#81ECEC",  # Light teal
     "#FAB1A0",  # Peach
@@ -47,7 +49,7 @@ PALETTE_PRIMARY: List[str] = [
 ]
 
 # Sequential palette for heatmaps and gradients
-PALETTE_SEQUENTIAL: str = "viridis"
+PALETTE_SEQUENTIAL: str = "magma"
 
 # Diverging palette for correlation matrices
 PALETTE_DIVERGING: str = "RdBu_r"
@@ -77,6 +79,9 @@ class ChartTheme:
         bg_color: Figure background color (RGBA).
         plot_bg_color: Axes/plot area background color.
         text_color: Primary text color.
+        title_color: Title text color (brighter).
+        label_color: Axis label color (muted).
+        tick_color: Tick label color (most muted).
         grid_color: Grid line color (with alpha).
         accent_color: Highlight/accent color.
         font_family: Primary font stack.
@@ -94,23 +99,26 @@ class ChartTheme:
     """
 
     name: str = "dark"
-    bg_color: str = "#1a1a2e"
-    plot_bg_color: str = "#16213e"
-    text_color: str = "#F0F0F5"
-    grid_color: str = "rgba(240, 240, 245, 0.08)"
-    grid_color_mpl: str = "#2a2a4a"
-    accent_color: str = "#6C5CE7"
+    bg_color: str = "#0E0E1A"
+    plot_bg_color: str = "#131325"
+    text_color: str = "#E2E8F0"
+    title_color: str = "#FFFFFF"
+    label_color: str = "#B0BEC5"
+    tick_color: str = "#8892A0"
+    grid_color: str = "rgba(58, 58, 92, 0.08)"
+    grid_color_mpl: str = "#3A3A5C"
+    accent_color: str = "#8B5CF6"
     font_family: str = "Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
-    title_size: int = 18
-    label_size: int = 13
-    tick_size: int = 11
-    legend_size: int = 11
+    title_size: int = 16
+    label_size: int = 12
+    tick_size: int = 10
+    legend_size: int = 10
     annotation_size: int = 10
-    line_width: float = 2.0
-    dpi: int = 300
+    line_width: float = 2.5
+    dpi: int = 250
     palette: List[str] = field(default_factory=lambda: PALETTE_PRIMARY.copy())
-    figsize_default: Tuple[int, int] = (12, 7)
-    figsize_wide: Tuple[int, int] = (14, 8)
+    figsize_default: Tuple[int, int] = (10, 6)
+    figsize_wide: Tuple[int, int] = (12, 7)
     figsize_tall: Tuple[int, int] = (10, 10)
 
 
@@ -118,12 +126,15 @@ class ChartTheme:
 
 DARK_THEME = ChartTheme(
     name="dark",
-    bg_color="#1a1a2e",
-    plot_bg_color="#16213e",
-    text_color="#F0F0F5",
-    grid_color="rgba(240, 240, 245, 0.08)",
-    grid_color_mpl="#2a2a4a",
-    accent_color="#6C5CE7",
+    bg_color="#0E0E1A",
+    plot_bg_color="#131325",
+    text_color="#E2E8F0",
+    title_color="#FFFFFF",
+    label_color="#B0BEC5",
+    tick_color="#8892A0",
+    grid_color="rgba(58, 58, 92, 0.08)",
+    grid_color_mpl="#3A3A5C",
+    accent_color="#8B5CF6",
 )
 
 LIGHT_THEME = ChartTheme(
@@ -131,9 +142,12 @@ LIGHT_THEME = ChartTheme(
     bg_color="#FFFFFF",
     plot_bg_color="#F8F9FA",
     text_color="#2D3436",
+    title_color="#1A1A2E",
+    label_color="#4A5568",
+    tick_color="#718096",
     grid_color="rgba(45, 52, 54, 0.1)",
     grid_color_mpl="#E0E0E0",
-    accent_color="#6C5CE7",
+    accent_color="#8B5CF6",
 )
 
 
@@ -163,26 +177,29 @@ def build_plotly_layout(theme: Optional[ChartTheme] = None) -> Dict[str, Any]:
             "size": t.tick_size,
         },
         "title": {
-            "font": {"size": t.title_size, "color": t.text_color},
+            "font": {"size": t.title_size, "color": t.title_color},
             "x": 0.5,
             "xanchor": "center",
         },
         "xaxis": {
             "gridcolor": t.grid_color,
             "zerolinecolor": t.grid_color,
-            "title": {"font": {"size": t.label_size}},
-            "tickfont": {"size": t.tick_size},
+            "title": {"font": {"size": t.label_size, "color": t.label_color}},
+            "tickfont": {"size": t.tick_size, "color": t.tick_color},
+            "showline": False,
         },
         "yaxis": {
             "gridcolor": t.grid_color,
             "zerolinecolor": t.grid_color,
-            "title": {"font": {"size": t.label_size}},
-            "tickfont": {"size": t.tick_size},
+            "title": {"font": {"size": t.label_size, "color": t.label_color}},
+            "tickfont": {"size": t.tick_size, "color": t.tick_color},
+            "showline": False,
         },
         "colorway": t.palette,
         "legend": {
             "font": {"size": t.legend_size},
-            "bgcolor": "rgba(0,0,0,0)",
+            "bgcolor": "rgba(26, 26, 46, 0.85)",
+            "borderwidth": 0,
         },
         "hoverlabel": {
             "bgcolor": t.plot_bg_color,
@@ -271,14 +288,16 @@ class ChartThemeManager:
         ax_list = [axes] if not hasattr(axes, "__iter__") else np.array(axes).flatten()
         for ax in ax_list:
             ax.set_facecolor(t.plot_bg_color)
-            ax.tick_params(colors=t.text_color, labelsize=t.tick_size)
-            ax.xaxis.label.set_color(t.text_color)
-            ax.yaxis.label.set_color(t.text_color)
-            ax.title.set_color(t.text_color)
+            ax.tick_params(colors=t.tick_color, labelsize=t.tick_size)
+            ax.xaxis.label.set_color(t.label_color)
+            ax.yaxis.label.set_color(t.label_color)
+            ax.title.set_color(t.title_color)
+            # Remove ALL spines for clean dashboard look
             for spine in ax.spines.values():
-                spine.set_color(t.grid_color_mpl)
-                spine.set_linewidth(0.5)
-            ax.grid(True, alpha=0.15, color=t.grid_color_mpl, linestyle="--")
+                spine.set_visible(False)
+            # Subtle, non-intrusive grid
+            ax.yaxis.grid(True, alpha=0.08, color=t.grid_color_mpl, linestyle="-")
+            ax.xaxis.grid(False)
 
         return fig, axes
 
@@ -308,7 +327,7 @@ class ChartThemeManager:
                 title,
                 fontsize=t.title_size,
                 fontweight="bold",
-                color=t.text_color,
+                color=t.title_color,
                 y=0.98,
             )
 
@@ -318,7 +337,7 @@ class ChartThemeManager:
                 subtitle,
                 ha="center",
                 fontsize=t.annotation_size,
-                color=t.text_color,
+                color=t.label_color,
                 alpha=0.7,
                 style="italic",
             )
@@ -329,7 +348,7 @@ class ChartThemeManager:
                 source_text,
                 ha="right",
                 fontsize=8,
-                color=t.text_color,
+                color=t.tick_color,
                 alpha=0.4,
             )
 
@@ -382,7 +401,7 @@ class ChartThemeManager:
         if chart_type in ("correlation", "correlation_matrix"):
             return "RdBu_r"
         elif chart_type == "heatmap":
-            return "Viridis"
+            return "Magma"
         return "Plasma"
 
     def save_figure(
@@ -398,7 +417,7 @@ class ChartThemeManager:
         Args:
             fig: The matplotlib figure.
             path: Output file path.
-            dpi: Override DPI. Defaults to theme DPI (300).
+            dpi: Override DPI. Defaults to theme DPI (250).
             transparent: If True, save with transparent background.
 
         Returns:
