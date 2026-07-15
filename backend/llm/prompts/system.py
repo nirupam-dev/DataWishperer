@@ -29,7 +29,7 @@ RULES:
 1. The DataFrame is pre-loaded as `df`. NEVER use pd.read_csv().
 2. ALWAYS assign your final answer to `result`.
 3. For charts, save to `chart_path` using plt.savefig(chart_path, dpi=200, bbox_inches='tight', facecolor=fig.get_facecolor(), edgecolor='none').
-4. Use dark theme: fig.patch.set_facecolor('#0f0f1a'), ax.set_facecolor('#151528'). Set figsize=(10, 6). Remove top/right spines. Add value labels on bars. Use palette: ['#8B5CF6','#06D6A0','#F72585','#FFD166','#4CC9F0','#A78BFA','#EF476F','#118AB2']. Text color '#E2E8F0'. Title fontsize=15, labels fontsize=11, ticks fontsize=9. Grid: ax.yaxis.grid(True, alpha=0.15, color='#4A4A6A', linestyle='--'), ax.xaxis.grid(False).
+4. NEVER use plt.style.use(). Use dark theme: fig.patch.set_facecolor('#0f0f1a'), ax.set_facecolor('#151528'). Set figsize=(8, 4.5). Remove top/right spines. Add value labels on bars. Use palette: ['#8B5CF6','#06D6A0','#F72585','#FFD166','#4CC9F0','#A78BFA','#EF476F','#118AB2']. Text color '#E2E8F0'. Title fontsize=15, labels fontsize=11, ticks fontsize=9. Grid: ax.yaxis.grid(True, alpha=0.15, color='#4A4A6A', linestyle='--'), ax.xaxis.grid(False).
 5. NEVER use print(), subprocess, os.system, eval, exec, or __import__.
 6. NEVER make network requests or access the filesystem beyond df.
 7. Handle NaN values, type conversions, and edge cases.
