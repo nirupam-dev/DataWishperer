@@ -395,7 +395,7 @@ def _render_chat_history() -> None:
             <div style="display:flex; justify-content:flex-end; margin-bottom:0.5rem;">
                 <div style="background:linear-gradient(135deg, #6366f1, #8b5cf6);
                             color:#fff; padding:0.65rem 1rem; border-radius:1rem 1rem 0.25rem 1rem;
-                            max-width:75%; font-size:0.82rem; line-height:1.5;
+                            max-width:75%; font-size:1rem; line-height:1.5;
                             box-shadow:0 2px 8px rgba(99,102,241,0.25);">
                     <div style="font-size:0.6rem; font-weight:600; opacity:0.8;
                                 margin-bottom:0.2rem; text-transform:uppercase;
@@ -445,7 +445,7 @@ def _render_full_assistant_entry(
 border:1px solid rgba(130,160,210,0.12);
 color:#e2e8f0; padding:0.65rem 1rem;
 border-radius:1rem 1rem 1rem 0.25rem;
-max-width:80%; font-size:0.82rem; line-height:1.5;
+max-width:80%; font-size:1rem; line-height:1.5;
 box-shadow:0 2px 8px rgba(0,0,0,0.15);">
 <div style="font-size:0.6rem; font-weight:600; color:#818cf8;
 margin-bottom:0.2rem; text-transform:uppercase;

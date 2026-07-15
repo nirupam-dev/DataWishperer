@@ -420,7 +420,7 @@ div[data-testid="stTextInput"] input, div.stTextInput input {
     background: rgba(10, 18, 35, 0.6) !important;
     border: 1px solid rgba(130, 160, 210, 0.18) !important;
     border-radius: var(--dw-radius-sm) !important; color: var(--dw-text-primary) !important;
-    font-size: 0.82rem !important; font-family: var(--dw-font-family) !important;
+    font-size: 1rem !important; font-family: var(--dw-font-family) !important;
 }
 
 /* Chat Input */
@@ -432,7 +432,7 @@ div[data-testid="stChatInput"] {
 div[data-testid="stChatInput"] textarea {
     color: var(--dw-text-primary) !important;
     font-family: var(--dw-font-family) !important;
-    font-size: 0.82rem !important;
+    font-size: 1rem !important;
 }
 /* Remove dark background behind chat input bar */
 div[data-testid="stBottom"],
