@@ -210,7 +210,7 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
         'legend.edgecolor': 'none',
         'legend.fontsize': 10,
         'legend.framealpha': 0.85,
-        'figure.figsize': [10, 6],
+        'figure.figsize': [8, 4.5],
         'figure.dpi': 100,
         'savefig.dpi': 250,
         'savefig.facecolor': '#0E0E1A',

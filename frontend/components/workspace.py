@@ -481,7 +481,9 @@ letter-spacing:0.5px;">🤖 DataWhisperer</div>
     # Chart visualization
     chart_path = response.chart_path
     if chart_path and Path(chart_path).exists():
+        st.markdown('<div style="max-width:680px; margin:0.5rem auto;">', unsafe_allow_html=True)
         st.image(chart_path, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Generated code (collapsible)
     if response.generated_code:
@@ -624,7 +626,9 @@ def _render_visualization(response: ChatResponse) -> None:
 
     chart_path = response.chart_path
     if chart_path and Path(chart_path).exists():
+        st.markdown('<div style="max-width:680px; margin:0.5rem auto;">', unsafe_allow_html=True)
         st.image(chart_path, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
         with open(chart_path, "rb") as f:
             st.download_button("⬇ Download", data=f.read(),
                                file_name=Path(chart_path).name,

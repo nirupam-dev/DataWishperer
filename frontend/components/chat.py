@@ -253,7 +253,9 @@ def _render_chart(response: ChatResponse) -> None:
     chart_path = response.chart_path
 
     if chart_path and Path(chart_path).exists():
+        st.markdown('<div style="max-width:680px; margin:0.5rem auto;">', unsafe_allow_html=True)
         st.image(chart_path, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     elif response.result_data:
         st.markdown(str(response.result_data))
 
