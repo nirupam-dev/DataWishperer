@@ -29,6 +29,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ── Bridge Streamlit Cloud Secrets → os.environ ──────────────────────────────
+# On Streamlit Cloud, secrets live in st.secrets (from the dashboard UI),
+# NOT in os.environ. The backend reads keys via os.getenv(), so we must
+# copy them over. This is a no-op when running locally with a .env file.
+try:
+    for key, value in st.secrets.items():
+        if isinstance(value, str) and key not in os.environ:
+            os.environ[key] = value
+except FileNotFoundError:
+    pass  # No secrets.toml — running locally with .env, nothing to bridge
+
 # ── Page Config (must be first Streamlit call) ───────────────────────────────
 st.set_page_config(
     page_title="DataWhisper — AI Data Analyst",
