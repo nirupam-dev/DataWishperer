@@ -181,10 +181,65 @@ _WRAPPER_TEMPLATE = textwrap.dedent('''\
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    # ── Professional Chart Defaults ──────────────────────────────────
+    # Set global matplotlib params for premium dark-themed charts
+    plt.rcParams.update({{
+        'figure.facecolor': '#0f0f1a',
+        'axes.facecolor': '#151528',
+        'axes.edgecolor': '#2D2D44',
+        'axes.labelcolor': '#E2E8F0',
+        'axes.titlesize': 15,
+        'axes.titleweight': 'bold',
+        'axes.titlepad': 15,
+        'axes.labelsize': 11,
+        'axes.labelpad': 8,
+        'axes.grid': True,
+        'axes.spines.top': False,
+        'axes.spines.right': False,
+        'grid.color': '#4A4A6A',
+        'grid.alpha': 0.15,
+        'grid.linestyle': '--',
+        'xtick.color': '#E2E8F0',
+        'ytick.color': '#E2E8F0',
+        'xtick.labelsize': 9,
+        'ytick.labelsize': 9,
+        'text.color': '#E2E8F0',
+        'legend.facecolor': '#1a1a2e',
+        'legend.edgecolor': '#2D2D44',
+        'legend.fontsize': 9,
+        'figure.figsize': [10, 6],
+        'figure.dpi': 100,
+        'savefig.dpi': 200,
+        'savefig.facecolor': '#0f0f1a',
+        'savefig.edgecolor': 'none',
+        'savefig.bbox': 'tight',
+        'savefig.pad_inches': 0.15,
+        'font.size': 10,
+        'axes.prop_cycle': matplotlib.cycler('color', [
+            '#8B5CF6', '#06D6A0', '#F72585', '#FFD166',
+            '#4CC9F0', '#A78BFA', '#EF476F', '#118AB2',
+        ]),
+    }})
+
     # Visualization extras (available but not required)
     try:
         import seaborn as sns
-        sns.set_theme(style="darkgrid", palette="viridis")
+        sns.set_theme(style="darkgrid", palette=[
+            '#8B5CF6', '#06D6A0', '#F72585', '#FFD166',
+            '#4CC9F0', '#A78BFA', '#EF476F', '#118AB2',
+        ], rc={{
+            'figure.facecolor': '#0f0f1a',
+            'axes.facecolor': '#151528',
+            'axes.edgecolor': '#2D2D44',
+            'axes.labelcolor': '#E2E8F0',
+            'text.color': '#E2E8F0',
+            'xtick.color': '#E2E8F0',
+            'ytick.color': '#E2E8F0',
+            'axes.spines.top': False,
+            'axes.spines.right': False,
+            'grid.alpha': 0.15,
+            'grid.color': '#4A4A6A',
+        }})
     except ImportError:
         pass
     try:

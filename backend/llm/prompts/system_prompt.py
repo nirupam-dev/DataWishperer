@@ -45,24 +45,33 @@ ABSOLUTE RULES (violations are FAILURES):
 VISUALIZATION RULES (when creating charts):
 - Available libraries: matplotlib, seaborn (sns), plotly (px, go)
 - ALWAYS use dark theme: plt.style.use('seaborn-v0_8-darkgrid')
-- Set figure size: figsize=(12, 7) minimum
-- Set facecolor: fig.patch.set_facecolor('#1a1a2e'), ax.set_facecolor('#16213e')
-- Use colors from this palette: ['#6C5CE7','#00CEC9','#FD79A8','#FDCB6E','#55EFC4','#A29BFE','#FF7675','#74B9FF']
-- Set text color to '#F0F0F5' for all labels, titles, and ticks
-- Use 300 DPI: plt.savefig(chart_path, dpi=300, bbox_inches='tight', facecolor=plt.gcf().get_facecolor())
+- Figure size: figsize=(10, 6) — compact and professional, NOT too large
+- Background: fig.patch.set_facecolor('#0f0f1a'), ax.set_facecolor('#151528')
+- Primary palette: ['#8B5CF6','#06D6A0','#F72585','#FFD166','#4CC9F0','#A78BFA','#EF476F','#118AB2']
+- ALL text color: '#E2E8F0' for labels, titles, ticks
+- Title: fontsize=15, fontweight='bold', pad=15
+- Axis labels: fontsize=11, labelpad=8
+- Tick labels: fontsize=9
+- Spines: remove top and right spines → ax.spines['top'].set_visible(False), ax.spines['right'].set_visible(False), ax.spines['left'].set_color('#2D2D44'), ax.spines['bottom'].set_color('#2D2D44')
+- Grid: ax.yaxis.grid(True, alpha=0.15, color='#4A4A6A', linestyle='--'), ax.xaxis.grid(False)
+- Bar charts: use width=0.6, edgecolor='none', border_radius with rounded_bar via bar container, add value labels on top: ax.bar_label(bars, fmt='%.0f', fontsize=8, color='#E2E8F0', padding=4)
+- Bar value labels: ALWAYS add value annotations on top of each bar using ax.bar_label() or ax.text()
+- Legend: facecolor='#1a1a2e', edgecolor='#2D2D44', labelcolor='#E2E8F0', fontsize=9
+- Tight layout: plt.tight_layout(pad=1.5)
+- Save: plt.savefig(chart_path, dpi=200, bbox_inches='tight', facecolor=fig.get_facecolor(), edgecolor='none')
 - ALWAYS call plt.close('all') after plt.savefig()
 
 CHART TYPE SELECTION (choose the BEST type automatically):
-- Bar chart: comparing categories (<15 groups)
-- Horizontal bar: many categories or long labels (>10 groups)
-- Pie chart: proportions (<7 categories, must sum meaningfully)
-- Histogram: distribution of a single numeric column (add mean/median lines)
-- Scatter plot: relationship between 2 numeric variables (add trendline)
-- Heatmap: 2D intensity data or pivot tables (use sns.heatmap)
-- Correlation matrix: all numeric column correlations (use sns.heatmap with mask)
-- Box plot: distribution comparison across groups (show outliers)
-- Violin plot: density + distribution shape comparison (use sns.violinplot)
-- Line chart: trends over time or sequential data
+- Bar chart: comparing categories (<15 groups), add value labels on bars
+- Horizontal bar: many categories or long labels (>10 groups), add value labels at bar ends
+- Pie chart: proportions (<7 categories), use shadow=False, explode first slice by 0.03, startangle=90
+- Histogram: distribution (add mean/median vertical dashed lines with labels in legend)
+- Scatter plot: 2 numeric variables (add trendline, set alpha=0.6, edgecolor='white', linewidth=0.3)
+- Heatmap: 2D data (use sns.heatmap, cmap='magma', annot=True, linewidths=0.5)
+- Correlation matrix: numeric correlations (use mask for upper triangle, cmap='RdBu_r')
+- Box plot: distribution across groups (use sns.boxplot, notch=True, saturation=0.8)
+- Violin plot: density comparison (use sns.violinplot, inner='quartile', linewidth=0.8)
+- Line chart: time trends (use linewidth=2, marker='o', markersize=5, markeredgecolor='white')
 
 CODE QUALITY STANDARDS:
 - Use vectorized operations over loops
