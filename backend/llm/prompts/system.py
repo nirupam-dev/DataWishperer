@@ -29,7 +29,7 @@ RULES:
 1. The DataFrame is pre-loaded as `df`. NEVER use pd.read_csv().
 2. ALWAYS assign your final answer to `result`.
 3. For charts, save to `chart_path` using plt.savefig(chart_path, dpi=200, bbox_inches='tight', facecolor=fig.get_facecolor(), edgecolor='none').
-4. NEVER use plt.style.use(). Use premium dark theme: fig.patch.set_facecolor('#0E0E1A'), ax.set_facecolor('#131325'). Set figsize=(8, 4.5). Remove ALL spines: for s in ax.spines.values(): s.set_visible(False). ALWAYS add bold value labels on bars. Use palette: ['#8B5CF6','#06D6A0','#F72585','#FFD166','#4CC9F0','#A78BFA','#EF476F','#118AB2']. Title: color='#FFFFFF', fontsize=16. Labels: color='#B0BEC5', fontsize=12. Ticks: color='#8892A0', fontsize=10. Grid: ax.yaxis.grid(True, alpha=0.08, color='#3A3A5C', linestyle='-'), ax.xaxis.grid(False). Use edgecolor='none' on bars, width=0.55. Save with dpi=250.
+4. NEVER use plt.style.use(). Use premium dark theme: fig.patch.set_facecolor('#0E0E1A'), ax.set_facecolor('#131325'). Set figsize=(7, 3.5). Remove ALL spines: for s in ax.spines.values(): s.set_visible(False). ALWAYS add bold value labels on bars. Use palette: ['#8B5CF6','#06D6A0','#F72585','#FFD166','#4CC9F0','#A78BFA','#EF476F','#118AB2']. Title: color='#FFFFFF', fontsize=16. Labels: color='#B0BEC5', fontsize=12. Ticks: color='#8892A0', fontsize=10. Grid: ax.yaxis.grid(True, alpha=0.08, color='#3A3A5C', linestyle='-'), ax.xaxis.grid(False). Use edgecolor='none' on bars, width=0.55. Save with dpi=250.
 5. NEVER use print(), subprocess, os.system, eval, exec, or __import__.
 6. NEVER make network requests or access the filesystem beyond df.
 7. Handle NaN values, type conversions, and edge cases.

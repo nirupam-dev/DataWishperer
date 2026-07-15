@@ -45,7 +45,7 @@ ABSOLUTE RULES (violations are FAILURES):
 VISUALIZATION RULES (when creating charts):
 - Available libraries: matplotlib, seaborn (sns), plotly (px, go)
 - NEVER call plt.style.use() as the premium dark theme is pre-configured via rcParams
-- Figure size: figsize=(8, 4.5) — compact and professional, NEVER larger than this
+- Figure size: figsize=(7, 3.5) — compact and professional, NEVER larger than this
 - Background: fig.patch.set_facecolor('#0E0E1A'), ax.set_facecolor('#131325')
 - Primary palette: ['#8B5CF6','#06D6A0','#F72585','#FFD166','#4CC9F0','#A78BFA','#EF476F','#118AB2']
 - ALL text color: '#E2E8F0' for labels, titles, ticks

@@ -117,8 +117,8 @@ class ChartTheme:
     line_width: float = 2.5
     dpi: int = 250
     palette: List[str] = field(default_factory=lambda: PALETTE_PRIMARY.copy())
-    figsize_default: Tuple[int, int] = (8, 5)
-    figsize_wide: Tuple[int, int] = (10, 6)
+    figsize_default: Tuple[int, int] = (7, 4)
+    figsize_wide: Tuple[int, int] = (9, 5)
     figsize_tall: Tuple[int, int] = (10, 10)
 
 

@@ -478,12 +478,12 @@ letter-spacing:0.5px;">🤖 DataWhisperer</div>
         except Exception:
             st.markdown(f"```\n{str(response.result_data)[:500]}\n```")
 
-    # Chart visualization
+    # Chart visualization — constrained to center column
     chart_path = response.chart_path
     if chart_path and Path(chart_path).exists():
-        st.markdown('<div style="max-width:680px; margin:0.5rem auto;">', unsafe_allow_html=True)
-        st.image(chart_path, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        _ch_pad_l, _ch_center, _ch_pad_r = st.columns([0.5, 3, 0.5])
+        with _ch_center:
+            st.image(chart_path, use_container_width=True)
 
     # Generated code (collapsible)
     if response.generated_code:
@@ -626,9 +626,9 @@ def _render_visualization(response: ChatResponse) -> None:
 
     chart_path = response.chart_path
     if chart_path and Path(chart_path).exists():
-        st.markdown('<div style="max-width:680px; margin:0.5rem auto;">', unsafe_allow_html=True)
-        st.image(chart_path, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        _v_pad_l, _v_center, _v_pad_r = st.columns([0.5, 3, 0.5])
+        with _v_center:
+            st.image(chart_path, use_container_width=True)
         with open(chart_path, "rb") as f:
             st.download_button("⬇ Download", data=f.read(),
                                file_name=Path(chart_path).name,
