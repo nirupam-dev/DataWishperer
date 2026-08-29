@@ -345,7 +345,7 @@ def _render_question_panel() -> None:
             for idx, q in enumerate(suggestions[:2]):
                 with row1_cols[idx]:
                     st.markdown('<div class="suggest-btn">', unsafe_allow_html=True)
-                    if st.button(q.upper(), key=f"suggest_{idx}", use_container_width=True):
+                    if st.button(q, key=f"suggest_{idx}", use_container_width=True):
                         _submit_question(q)
                     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -354,7 +354,7 @@ def _render_question_panel() -> None:
                 for idx, q in enumerate(suggestions[2:4]):
                     with row2_cols[idx]:
                         st.markdown('<div class="suggest-btn">', unsafe_allow_html=True)
-                        if st.button(q.upper(), key=f"suggest_{idx+2}", use_container_width=True):
+                        if st.button(q, key=f"suggest_{idx+2}", use_container_width=True):
                             _submit_question(q)
                         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -437,7 +437,7 @@ def _render_full_assistant_entry(
             provider_info += f" · {response.latency_ms/1000:.1f}s"
 
     if provider_info:
-        answer_text += f"\n\n<span style='color:#64748b; font-size:0.65rem;'>{provider_info}</span>"
+        answer_text += f"\n\n<span style='color:#94a3b8; font-size:0.65rem; background:rgba(99,102,241,0.08); padding:0.15rem 0.5rem; border-radius:4px; border:1px solid rgba(130,160,210,0.12);'>{provider_info}</span>"
 
     st.markdown(f"""
 <div style="display:flex; justify-content:flex-start; margin-bottom:0.5rem;">
@@ -645,7 +645,7 @@ def _render_footer() -> None:
     """Centered footer at page bottom."""
     st.markdown("""
     <div class="dw-footer">
-        © 2025 DataWhisper AI · Built with Streamlit · Powered by Groq & Ollama
+        © 2026 DataWhisper AI · Built with Streamlit · Powered by Groq & Ollama
     </div>
     """, unsafe_allow_html=True)
 

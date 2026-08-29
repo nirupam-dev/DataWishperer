@@ -434,6 +434,10 @@ div[data-testid="stChatInput"] textarea {
     font-family: var(--dw-font-family) !important;
     font-size: 1rem !important;
 }
+div[data-testid="stChatInput"]:focus-within {
+    border-color: rgba(99, 102, 241, 0.4) !important;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.12) !important;
+}
 /* Remove dark background behind chat input bar */
 div[data-testid="stBottom"],
 div[data-testid="stBottom"] > div,
@@ -565,8 +569,10 @@ div.suggest-btn button {
     font-family: var(--dw-font-family) !important;
 }
 div.suggest-btn button:hover {
-    background: rgba(99, 102, 241, 0.12) !important;
+    background: rgba(99, 102, 241, 0.15) !important;
     border-color: rgba(130, 160, 210, 0.35) !important;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.1) !important;
+    color: #e2e8f0 !important;
 }
 
 /* ── Scroll indicator ────────────────────────────────────────── */
@@ -585,10 +591,12 @@ div.animate-in { animation: fadeInUp 0.45s ease forwards; }
 
 /* ── Footer ──────────────────────────────────────────────────── */
 div.dw-footer {
-    text-align: center; padding: 1rem 0 0.5rem;
-    font-size: 0.65rem; color: var(--dw-text-muted);
-    border-top: 1px solid rgba(130, 160, 210, 0.06);
+    text-align: center; padding: 1.2rem 0 0.6rem;
+    font-size: 0.68rem; color: #94a3b8;
+    border-top: 1px solid rgba(130, 160, 210, 0.1);
     margin-top: 1.5rem;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    letter-spacing: 0.3px;
 }
 
 /* ── Workspace Preview (home hero) ───────────────────────────── */
