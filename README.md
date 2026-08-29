@@ -125,7 +125,7 @@ All settings are controlled via environment variables or `.env` file:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GROQ_API_KEY` | _(empty)_ | Groq API key (primary LLM). Leave empty to use Ollama only |
-| `GROK_MODEL` | `llama-3.3-70b-versatile` | Groq model identifier |
+| `GROK_MODEL` | `meta-llama/llama-4-scout-17b-16e-instruct` | Groq model identifier |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API endpoint (fallback) |
 | `OLLAMA_MODEL` | `qwen2.5:7b` | Ollama model identifier |
 | `OLLAMA_TEMPERATURE` | `0.1` | Sampling temperature |
