@@ -110,7 +110,7 @@ class GrokSettings(BaseSettings):
         description="API base URL (defaults to Groq).",
     )
     model: str = Field(
-        default="llama-3.3-70b-versatile",
+        default="meta-llama/llama-4-scout-17b-16e-instruct",
         description="Grok/Groq model identifier.",
     )
     timeout_seconds: int = Field(
