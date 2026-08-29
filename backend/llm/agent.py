@@ -47,6 +47,7 @@ from backend.core.exceptions import (
 from backend.core.logging_config import get_logger
 from backend.llm.base_provider import BaseLLMProvider
 from backend.llm.chains.query_chain import QueryChain
+from backend.llm.guardrails import check_relevance
 from backend.llm.memory import ConversationMemory
 from backend.models.schemas import (
     CodeExecutionResult,
@@ -292,6 +293,24 @@ class DataWhispererAgent:
                     f"[Switched to dataset: {metadata.original_name}]",
                 )
 
+        # ── Stage 1.5: OFF-TOPIC GUARD (zero-cost, no tokens) ────────────
+        column_names = [c.name for c in metadata.columns]
+        is_relevant, rejection_msg = check_relevance(question, column_names)
+        if not is_relevant:
+            elapsed_ms = round((time.time() - start_time) * 1000, 2)
+            logger.info(
+                "Off-topic question blocked (0 tokens): '%s'",
+                question[:80],
+            )
+            return AgentResult(
+                success=True,
+                content=rejection_msg or "Please ask a question about your data.",
+                result_type=ResultType.TEXT,
+                tokens_used=0,
+                latency_ms=elapsed_ms,
+                attempts=0,
+            )
+
         # ── Stage 2: GENERATE ────────────────────────────────────────────
         try:
             code, llm_response, reasoning = self._chain.generate_code(
@@ -435,6 +454,33 @@ class DataWhispererAgent:
 
         # ── Stage 5: OUTPUT (result is captured in AgentResult) ──────────
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
+
+        # ── Stage 5.5: Catch OFF_TOPIC results from LLM (Layer 2) ───────
+        result_str = str(execution_result.data) if execution_result.data else ""
+        if result_str.startswith("OFF_TOPIC:"):
+            off_topic_msg = (
+                "🚫 **Off-Topic Question Detected**\n\n"
+                "I'm **DataWhisper AI** — I'm specifically designed to analyze "
+                "your uploaded CSV data. I can't help with general programming, "
+                "trivia, or other non-data questions.\n\n"
+                "💡 **Try asking things like:**\n"
+                "- *\"What is the average revenue by region?\"*\n"
+                "- *\"Show me the top 10 customers by sales\"*\n"
+                "- *\"Plot a bar chart of monthly expenses\"*\n\n"
+                "📊 Ask me anything about **your data** and I'll analyze it!"
+            )
+            logger.info(
+                "LLM detected off-topic question (Layer 2): '%s'",
+                question[:80],
+            )
+            return AgentResult(
+                success=True,
+                content=off_topic_msg,
+                result_type=ResultType.TEXT,
+                tokens_used=total_tokens,
+                latency_ms=elapsed_ms,
+                attempts=1,
+            )
 
         # ── Stage 6: EXPLAIN ─────────────────────────────────────────────
         result_summary = self._summarize_result(execution_result)
