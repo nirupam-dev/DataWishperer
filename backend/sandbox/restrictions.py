@@ -218,15 +218,18 @@ BLOCKED_ATTRIBUTES: frozenset[str] = frozenset({
     "communicate",  # Popen.communicate
 
     # File operations
+    # NOTE: "rename" and "replace" are intentionally NOT blocked here
+    # because they are common pandas methods (df.rename(), df.replace()).
+    # File-system rename/replace is already prevented by blocking the
+    # 'os', 'shutil', and 'pathlib' modules in BLOCKED_MODULES.
+    # Similarly, "write" is not blocked because matplotlib uses it
+    # internally for savefig.
     "unlink",
     "remove",
     "rmdir",
     "rmtree",
-    "rename",
-    "replace",
     "makedirs",
     "mkdir",
-    "write",       # except plt.savefig which writes internally
     "writelines",
     "truncate",
 })
